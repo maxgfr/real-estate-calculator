@@ -2,18 +2,27 @@ import {
   Box,
   FormControl,
   FormLabel,
+  ListItem,
   NumberDecrementStepper,
   NumberIncrementStepper,
   NumberInput,
   NumberInputField,
   NumberInputStepper,
   Text,
+  UnorderedList,
 } from "@chakra-ui/react";
 import type { NextPage } from "next";
 import Head from "next/head";
 import React, { useEffect } from "react";
 import { useRouter } from "next/router";
-import { loanInterestCalculator, loanPaymentCalculator } from "../utils";
+import {
+  getTotalFeesMortgage,
+  getMonthlyMortgagePayment,
+  getRevenuPerMonth,
+  getTotalPrice,
+  getTotalPriceMortgage,
+  getProfitability,
+} from "../utils";
 
 const pattern = [
   {
@@ -27,8 +36,11 @@ const pattern = [
   {
     title: "Crédit 💳",
     value: [
-      { key: "bankContribution", name: "Apport", step: 1000 },
-      { key: "bankLoan", name: "Montant emprunté", step: 1000 },
+      {
+        key: "bankLoan",
+        name: "Montant emprunté (avec assurance comprise)",
+        step: 1000,
+      },
       { key: "bankRate", name: "Taux", step: 0.1 },
       { key: "bankLoanPeriod", name: "Durée du prêt (en année)", step: 1 },
     ],
@@ -54,7 +66,7 @@ const pattern = [
 type Key = typeof pattern[number]["value"][number]["key"];
 
 type State = {
-  [key in Key]: number;
+  [key in Key]: string | number;
 };
 
 const Home: NextPage = () => {
@@ -65,7 +77,7 @@ const Home: NextPage = () => {
     setState(router.query as unknown as State);
   }, [router.query]);
 
-  const onChangeState = (key: string, value: number) => {
+  const onChangeState = (key: string, value: string) => {
     setState({ ...state, [key]: value });
     router.replace(
       {
@@ -103,9 +115,7 @@ const Home: NextPage = () => {
                 <NumberInput
                   min={0}
                   step={step ?? 1000}
-                  onChange={(_valueString, valueNumber) =>
-                    onChangeState(key, valueNumber)
-                  }
+                  onChange={valueString => onChangeState(key, valueString)}
                   onBlur={e => {
                     e.preventDefault();
                   }}
@@ -131,27 +141,102 @@ const Home: NextPage = () => {
       >
         Résultat 🚀
       </Text>
-      <Box marginBottom="10px">
-        <Text fontSize="xl" fontWeight={"bold"} marginBottom="5px">
-          Prêt
-        </Text>
-        <Text>
-          Mensualité :{" "}
-          {loanPaymentCalculator(
+      <UnorderedList marginBottom="10px">
+        <ListItem>
+          Coût total de l’investissement:{" "}
+          {getTotalPrice(
+            state.housingPrice,
+            state.notaryFees,
+            state.houseWorks
+          )}
+          {"€ "}
+        </ListItem>
+        <ListItem>
+          Coût total du crédit:{" "}
+          {getTotalPriceMortgage(
+            state.bankLoan,
+            getTotalFeesMortgage(
+              state.bankLoan,
+              state.bankLoanPeriod,
+              getMonthlyMortgagePayment(
+                state.bankLoan,
+                state.bankRate,
+                state.bankLoanPeriod
+              )
+            )
+          )}
+          {"€ "}
+          (dont{" "}
+          {getTotalFeesMortgage(
+            state.bankLoan,
+            state.bankLoanPeriod,
+            getMonthlyMortgagePayment(
+              state.bankLoan,
+              state.bankRate,
+              state.bankLoanPeriod
+            )
+          )}
+          {"€ "}
+          d&apos;intérêt)
+        </ListItem>
+        <ListItem>
+          Mensualité du prêt :{" "}
+          {getMonthlyMortgagePayment(
             state.bankLoan,
             state.bankRate,
             state.bankLoanPeriod
           )}
-        </Text>
-        <Text>
-          Coût intérêt :{" "}
-          {loanInterestCalculator(
-            state.bankLoan,
-            state.bankRate,
-            state.bankLoanPeriod
+          {"€"}
+        </ListItem>
+        <ListItem>
+          Revenu locatif mensuel brut :{" "}
+          {getRevenuPerMonth(
+            state.rent,
+            state.rentalCharges,
+            state.propertyTax
           )}
-        </Text>
-      </Box>
+          {"€"}
+        </ListItem>
+        <ListItem>
+          Rentabilité brut basé sur le crédit :{" "}
+          {getProfitability(
+            getRevenuPerMonth(
+              state.rent,
+              state.rentalCharges,
+              state.propertyTax
+            ),
+            getTotalPriceMortgage(
+              state.bankLoan,
+              getTotalFeesMortgage(
+                state.bankLoan,
+                state.bankLoanPeriod,
+                getMonthlyMortgagePayment(
+                  state.bankLoan,
+                  state.bankRate,
+                  state.bankLoanPeriod
+                )
+              )
+            )
+          )}
+          {"%"}
+        </ListItem>
+        <ListItem>
+          Rentabilité brut basé sur le prix du bien :{" "}
+          {getProfitability(
+            getRevenuPerMonth(
+              state.rent,
+              state.rentalCharges,
+              state.propertyTax
+            ),
+            getTotalPrice(
+              state.housingPrice,
+              state.notaryFees,
+              state.houseWorks
+            )
+          )}
+          {"%"}
+        </ListItem>
+      </UnorderedList>
     </Box>
   );
 };
