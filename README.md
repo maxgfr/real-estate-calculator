@@ -1,13 +1,21 @@
 # renta-immo
 
-## Run in dev mode
+## Description
+
+`renta-immo` est un outil qui vous aide à calculer la rentabilité d'un investissement immobilier.
+
+![Alt Text](https://raw.githubusercontent.com/maxgfr/renta-immo/main/.github/assets/app.png)
+
+## Usage
+
+### Dev mode
 
 ```bash
 yarn # to install dependencies
 yarn dev # to run the server
 ```
 
-## Run in prod mode
+### Production mode
 
 ```bash
 yarn # to install dependencies
