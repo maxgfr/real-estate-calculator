@@ -4,7 +4,7 @@
 
 `renta-immo` est un outil qui vous aide à calculer la rentabilité d'un investissement immobilier.
 
-![Alt Text](https://raw.githubusercontent.com/maxgfr/renta-immo/blob/main/.github/assets/main.png)
+![Alt Text](https://raw.githubusercontent.com/maxgfr/renta-immo/main/.github/assets/main.png)
 
 ## Usage
 
