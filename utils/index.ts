@@ -52,7 +52,20 @@ export const getNetMonthlyIncome = (
     Number(annualRent) / 12 -
     Number(annualCharges) / 12 -
     Number(annualPropertyTax) / 12;
-  return isNaN(monthly) ? "0" : monthly.toFixed(decimal);
+  return Number.isNaN(monthly) ? "0" : monthly.toFixed(decimal);
+};
+
+export const getNetMonthlyIncomeMixed = (
+  monthlyRent: string | number,
+  monthlyCharges: string | number,
+  annualPropertyTax: string | number,
+  decimal = 0
+): string => {
+  const monthly =
+    Number(monthlyRent) -
+    Number(monthlyCharges) -
+    Number(annualPropertyTax) / 12;
+  return Number.isNaN(monthly) ? "0" : monthly.toFixed(decimal);
 };
 
 export const getTotalPurchasePrice = (

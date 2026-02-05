@@ -1,5 +1,8 @@
 # Estate Calc
 
+![CI](https://github.com/maxgfr/estate-calc/workflows/CI/badge.svg)
+![Tests](https://github.com/maxgfr/estate-calc/workflows/Tests/badge.svg)
+
 **Calculate rental property ROI, cashflow, and yield in seconds.** Make smarter real estate investment decisions with our free, modern calculator featuring Excel export.
 
 ## ✨ Features
@@ -29,7 +32,7 @@ Cashflow = Net Monthly Income - Monthly Mortgage Payment
 ### Yields
 ```
 Gross Yield = (Annual Rent / Total Investment) × 100
-Net Yield = (Annual Rent - Charges - Taxes) / Total Investment × 100
+Net Yield = ((Annual Rent - Annual Charges - Annual Taxes) / Total Investment) × 100
 ```
 
 ## 🚀 Usage
@@ -48,10 +51,20 @@ pnpm build
 pnpm test
 ```
 
-1. Enter **Purchase** details (property price, notary fees, renovation)
-2. Configure **Mortgage** (loan amount, rate, duration)
-3. Add **Rental** parameters (rent, charges, property tax)
+1. Enter **Property** details (purchase price, closing costs, renovation budget)
+2. Configure **Mortgage** (loan amount, rate, term)
+3. Add **Rental Income** parameters (monthly rent, building fees, annual property tax)
 4. View real-time **Results** and export to Excel
+
+## 🔗 Share Calculations
+
+The calculator automatically generates a shareable URL with your values. For example:
+
+```
+https://maxgfr.github.io/estate-calc/?housingPrice=250000&notaryFees=18000&houseWorks=5000&bankLoan=200000&bankRate=3.2&bankLoanPeriod=25&rent=1200&rentalCharges=100&propertyTax=1200
+```
+
+This allows you to bookmark specific scenarios or share them with others.
 
 ## 📁 Project Structure
 
@@ -64,9 +77,10 @@ estate-calc/
 │   ├── index.ts           # Calculation functions
 │   └── index.test.ts      # Unit tests (21 tests)
 ├── .github/workflows/
+│   ├── build.yml          # Build workflow
 │   ├── ci.yml            # Lint, test, build
 │   └── deploy.yml        # GitHub Pages deployment
-└── public/               # Static assets
+└── public/               # Static assets (favicon, icon)
 ```
 
 ## 📊 Performance Indicators

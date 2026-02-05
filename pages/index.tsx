@@ -32,7 +32,7 @@ import {
   getDownPayment,
   getTotalMortgageInterest,
   getMonthlyMortgagePayment,
-  getNetMonthlyIncome,
+  getNetMonthlyIncomeMixed,
   getTotalMortgageCost,
   getTotalPurchasePrice,
   getYield,
@@ -40,35 +40,27 @@ import {
 
 const sections = [
   {
-    title: "Purchase 🏠",
+    title: "Property 🏠",
     fields: [
-      { key: "housingPrice", name: "Property price", step: 1000 },
-      { key: "notaryFees", name: "Notary fees", step: 1000 },
-      { key: "houseWorks", name: "Renovation costs", step: 1000 },
+      { key: "housingPrice", name: "Purchase price", step: 10000 },
+      { key: "notaryFees", name: "Closing costs", step: 1000 },
+      { key: "houseWorks", name: "Renovation budget", step: 1000 },
     ],
   },
   {
     title: "Mortgage 💳",
     fields: [
-      {
-        key: "bankLoan",
-        name: "Loan amount (including insurance)",
-        step: 1000,
-      },
-      { key: "bankRate", name: "Interest rate (%)", step: 0.1 },
-      { key: "bankLoanPeriod", name: "Loan duration (years)", step: 1 },
+      { key: "bankLoan", name: "Loan amount", step: 10000 },
+      { key: "bankRate", name: "Interest rate", step: 0.1 },
+      { key: "bankLoanPeriod", name: "Loan term", step: 1 },
     ],
   },
   {
-    title: "Rental 💰",
+    title: "Rental Income 💰",
     fields: [
-      { key: "rent", name: "Annual rent (including charges)", step: 100 },
-      {
-        key: "rentalCharges",
-        name: "Annual HOA/condo fees",
-        step: 100,
-      },
-      { key: "propertyTax", name: "Property tax", step: 100 },
+      { key: "rent", name: "Monthly rent", step: 100 },
+      { key: "rentalCharges", name: "Monthly building fees", step: 50 },
+      { key: "propertyTax", name: "Annual property tax", step: 100 },
     ],
   },
 ] as const;
@@ -94,15 +86,15 @@ const formatPercent = (value: string): string =>
   }) + " %";
 
 const defaultState: State = {
-  housingPrice: "150000",
-  notaryFees: "13000",
-  houseWorks: "5000",
-  bankLoan: "168000",
+  housingPrice: "200000",
+  notaryFees: "15000",
+  houseWorks: "10000",
+  bankLoan: "170000",
   bankRate: "3.5",
   bankLoanPeriod: "20",
-  rent: "9600",
-  rentalCharges: "600",
-  propertyTax: "800",
+  rent: "1000",
+  rentalCharges: "80",
+  propertyTax: "1000",
 };
 
 const Home: NextPage = () => {
@@ -131,7 +123,7 @@ const Home: NextPage = () => {
   const inputText = useColorModeValue("inherit", "gray.100");
   const inputPlaceholder = useColorModeValue("gray.500", "gray.400");
   const textRevenu = useColorModeValue("green.700", "green.400");
-  const textInterets = useColorModeValue("red.600", "red.400");
+  const textInterest = useColorModeValue("red.600", "red.400");
 
   useEffect(() => {
     if (Object.keys(router.query).length > 0) {
@@ -182,12 +174,12 @@ const Home: NextPage = () => {
   );
 
   const netMonthlyIncome = useMemo(
-    () => getNetMonthlyIncome(state.rent, state.rentalCharges, state.propertyTax),
+    () => getNetMonthlyIncomeMixed(state.rent, state.rentalCharges, state.propertyTax),
     [state.rent, state.rentalCharges, state.propertyTax]
   );
 
   const grossYield = useMemo(
-    () => getYield(state.rent, totalPrice),
+    () => getYield(Number(state.rent) * 12, totalPrice),
     [state.rent, totalPrice]
   );
 
@@ -221,10 +213,10 @@ const Home: NextPage = () => {
     // Purchase sheet
     const purchaseData = [
       ["Item", "Amount"],
-      ["Property price", stripCurrency(String(state.housingPrice))],
-      ["Notary fees", stripCurrency(String(state.notaryFees))],
-      ["Renovation costs", stripCurrency(String(state.houseWorks))],
-      ["Total Purchase Price", stripCurrency(totalPrice)],
+      ["Purchase price", stripCurrency(String(state.housingPrice))],
+      ["Closing costs", stripCurrency(String(state.notaryFees))],
+      ["Renovation budget", stripCurrency(String(state.houseWorks))],
+      ["Total", stripCurrency(totalPrice)],
     ];
     const purchaseSheet = XLSX.utils.aoa_to_sheet(purchaseData);
     XLSX.utils.book_append_sheet(workbook, purchaseSheet, "Purchase");
@@ -244,11 +236,11 @@ const Home: NextPage = () => {
 
     // Rental sheet
     const rentalData = [
-      ["Item", "Amount (Annual)", "Amount (Monthly)"],
-      ["Annual rent", stripCurrency(String(state.rent)), stripCurrency(String(state.rent)) / 12],
-      ["Annual HOA fees", stripCurrency(String(state.rentalCharges)), stripCurrency(String(state.rentalCharges)) / 12],
-      ["Property tax", stripCurrency(String(state.propertyTax)), stripCurrency(String(state.propertyTax)) / 12],
-      ["Net monthly income", "", stripCurrency(netMonthlyIncome)],
+      ["Item", "Amount (Monthly)", "Amount (Annual)"],
+      ["Monthly rent", stripCurrency(String(state.rent)), stripCurrency(String(state.rent)) * 12],
+      ["Monthly building fees", stripCurrency(String(state.rentalCharges)), stripCurrency(String(state.rentalCharges)) * 12],
+      ["Property tax", stripCurrency(String(state.propertyTax)) / 12, stripCurrency(String(state.propertyTax))],
+      ["Net monthly income", stripCurrency(netMonthlyIncome), stripCurrency(netMonthlyIncome) * 12],
     ];
     const rentalSheet = XLSX.utils.aoa_to_sheet(rentalData);
     XLSX.utils.book_append_sheet(workbook, rentalSheet, "Rental");
@@ -488,7 +480,7 @@ const Home: NextPage = () => {
                   <FlexRow
                     label="Total interest"
                     value={formatCurrency(totalMortgageInterest)}
-                    color={textInterets}
+                    color={textInterest}
                   />
                 </Box>
               </VStack>
