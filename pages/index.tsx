@@ -86,15 +86,15 @@ const formatPercent = (value: string): string =>
   }) + " %";
 
 const defaultState: State = {
-  housingPrice: "200000",
-  notaryFees: "15000",
-  houseWorks: "10000",
-  bankLoan: "170000",
-  bankRate: "3.5",
-  bankLoanPeriod: "20",
-  rent: "1000",
-  rentalCharges: "80",
-  propertyTax: "1000",
+  housingPrice: "",
+  notaryFees: "",
+  houseWorks: "",
+  bankLoan: "",
+  bankRate: "",
+  bankLoanPeriod: "",
+  rent: "",
+  rentalCharges: "",
+  propertyTax: "",
 };
 
 const Home: NextPage = () => {
@@ -337,11 +337,6 @@ const Home: NextPage = () => {
                 "price": "0",
                 "priceCurrency": "USD"
               },
-              "aggregateRating": {
-                "@type": "AggregateRating",
-                "ratingValue": "4.8",
-                "ratingCount": "125"
-              }
             }),
           }}
         />
