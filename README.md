@@ -1,32 +1,18 @@
-# Real Estate ROI Calculator
+# Estate Calc
 
-Online calculator to evaluate the profitability of a real estate rental investment.
+**Calculate rental property ROI, cashflow, and yield in seconds.** Make smarter real estate investment decisions with our free, modern calculator featuring Excel export.
 
-## Features
+## ✨ Features
 
-- Automatic gross and net yield calculation
-- Mortgage monthly payment simulation
-- Monthly cashflow calculation
-- Export results to Excel file
-- Realistic default values to get started quickly
-- Responsive interface (mobile and desktop)
-- Dark/Light/System theme support
-- Visual performance indicators (positive/negative cashflow, yield)
+- 📊 **Instant Calculations** - Monthly cashflow, gross & net yield
+- 💰 **Mortgage Simulator** - Accurate monthly payments with interest breakdown
+- 📥 **Excel Export** - Multi-sheet professional export
+- 🎨 **Modern UI** - Dark/Light theme, mobile responsive
+- ⚡ **Real-time Updates** - See results change as you type
 
-## Calculations
+## 🧮 Calculations
 
-### Gross Yield
-```
-Gross Yield = (Annual Rent / Total Investment Cost) × 100
-```
-
-### Net Yield
-```
-Net Monthly Income = (Annual Rent - Charges - Property Tax) / 12
-Net Yield = (Net Annual Income / Total Investment Cost) × 100
-```
-
-### Monthly Mortgage Payment (Constant Annuity Formula)
+### Monthly Mortgage Payment
 ```
 M = P × [t(1+t)^n] / [(1+t)^n - 1]
 ```
@@ -35,27 +21,18 @@ M = P × [t(1+t)^n] / [(1+t)^n - 1]
 - t = Monthly rate (Annual rate / 12 / 100)
 - n = Number of months (Duration × 12)
 
-### Monthly Cashflow
+### Cashflow
 ```
 Cashflow = Net Monthly Income - Monthly Mortgage Payment
 ```
 
-### Total Credit Cost
+### Yields
 ```
-Total Cost = Monthly Payment × Number of Months
-Total Interest = Total Cost - Loan Amount
+Gross Yield = (Annual Rent / Total Investment) × 100
+Net Yield = (Annual Rent - Charges - Taxes) / Total Investment × 100
 ```
 
-## Tech Stack
-
-- **Framework**: Next.js 14
-- **UI**: Chakra UI
-- **Language**: TypeScript
-- **Testing**: Jest, React Testing Library
-- **Package Manager**: pnpm
-- **Deployment**: GitHub Pages
-
-## Installation
+## 🚀 Usage
 
 ```bash
 # Install dependencies
@@ -67,35 +44,47 @@ pnpm dev
 # Build for production
 pnpm build
 
-# Run production server
-pnpm start
-
 # Run tests
 pnpm test
-
-# Run tests in watch mode
-pnpm test:watch
-
-# Run tests with coverage
-pnpm test:coverage
 ```
 
-## Usage
+1. Enter **Purchase** details (property price, notary fees, renovation)
+2. Configure **Mortgage** (loan amount, rate, duration)
+3. Add **Rental** parameters (rent, charges, property tax)
+4. View real-time **Results** and export to Excel
 
-1. Enter purchase parameters (property price, notary fees, renovation costs)
-2. Configure mortgage (loan amount, rate, duration)
-3. Enter rental parameters (rent, charges, property tax)
-4. Results update in real-time
-5. Export your calculations to Excel with the "Export" button
+## 📁 Project Structure
 
-## Performance Indicators
+```
+estate-calc/
+├── pages/
+│   ├── index.tsx          # Main calculator page
+│   └── _app.tsx           # App with theme provider
+├── utils/
+│   ├── index.ts           # Calculation functions
+│   └── index.test.ts      # Unit tests (21 tests)
+├── .github/workflows/
+│   ├── ci.yml            # Lint, test, build
+│   └── deploy.yml        # GitHub Pages deployment
+└── public/               # Static assets
+```
 
-- **Positive cashflow**: The investment generates income each month
-- **Negative cashflow**: The investment costs money each month (avoid)
-- **Net yield > 5%**: Excellent investment
-- **Net yield 3-5%**: Good investment
-- **Net yield < 3%**: Low profitability
+## 📊 Performance Indicators
 
-## License
+| Metric | Excellent | Good | Weak |
+|--------|-----------|------|-------|
+| Net Yield | > 5% | 3-5% | < 3% |
+| Cashflow | Positive | — | Negative |
+
+## 🛠️ Tech Stack
+
+- **Framework**: Next.js 16
+- **UI**: Chakra UI
+- **Language**: TypeScript
+- **Testing**: Jest, React Testing Library
+- **Package Manager**: pnpm
+- **Deployment**: GitHub Pages
+
+## 📄 License
 
 MIT

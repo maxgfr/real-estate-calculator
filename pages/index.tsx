@@ -278,25 +278,25 @@ const Home: NextPage = () => {
       paddingY={{ base: "16px", md: "32px" }}
     >
       <Head>
-        <title>Real Estate ROI Calculator - Free Rental Property Investment Tool</title>
+        <title>Estate Calc - Real Estate ROI Calculator</title>
         <meta
           name="description"
-          content="Calculate real estate investment returns, cashflow, and yield. Free tool for evaluating rental property profitability with mortgage calculations."
+          content="Calculate rental property ROI, cashflow, and yield. Free Excel export. Make smarter real estate investment decisions."
         />
-        <meta name="keywords" content="real estate calculator, rental yield, cashflow calculator, mortgage calculator, investment property ROI" />
-        <link rel="canonical" href="https://yourusername.github.io/renta-immo/" />
+        <meta name="keywords" content="real estate calculator, rental yield, cashflow calculator, mortgage calculator, investment property ROI, landlord tools" />
+        <link rel="canonical" href="https://yourusername.github.io/estate-calc/" />
 
         {/* Open Graph */}
         <meta property="og:type" content="website" />
-        <meta property="og:title" content="Real Estate ROI Calculator" />
-        <meta property="og:description" content="Calculate rental property returns, cashflow, and yield. Free investment calculator." />
-        <meta property="og:url" content="https://yourusername.github.io/renta-immo/" />
+        <meta property="og:title" content="Estate Calc - Real Estate ROI Calculator" />
+        <meta property="og:description" content="Calculate rental property ROI, cashflow, and yield. Free Excel export. Make smarter real estate investment decisions." />
+        <meta property="og:url" content="https://yourusername.github.io/estate-calc/" />
         <meta property="og:locale" content="en_US" />
 
         {/* Twitter Card */}
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Real Estate ROI Calculator" />
-        <meta name="twitter:description" content="Calculate rental property returns, cashflow, and yield." />
+        <meta name="twitter:title" content="Estate Calc - Real Estate ROI Calculator" />
+        <meta name="twitter:description" content="Calculate rental property ROI, cashflow, and yield. Free Excel export." />
 
         {/* JSON-LD Structured Data */}
         <script
@@ -305,9 +305,9 @@ const Home: NextPage = () => {
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebApplication",
-              "name": "Real Estate ROI Calculator",
-              "description": "Calculate real estate investment returns, cashflow, and yield for rental properties.",
-              "url": "https://yourusername.github.io/renta-immo/",
+              "name": "Estate Calc - Real Estate ROI Calculator",
+              "description": "Calculate rental property ROI, cashflow, and yield. Free Excel export for real estate investors.",
+              "url": "https://yourusername.github.io/estate-calc/",
               "applicationCategory": "FinanceApplication",
               "operatingSystem": "Web",
               "offers": {
@@ -324,7 +324,7 @@ const Home: NextPage = () => {
               ],
               "author": {
                 "@type": "Organization",
-                "name": "renta-immo"
+                "name": "estate-calc"
               }
             }),
           }}
@@ -337,7 +337,7 @@ const Home: NextPage = () => {
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "SoftwareApplication",
-              "name": "Real Estate ROI Calculator",
+              "name": "Estate Calc",
               "applicationCategory": "FinanceApplication",
               "operatingSystem": "Web",
               "offers": {
