@@ -1,6 +1,5 @@
 {
-  "name": "Real Estate Calculator",
-  "short_name": "Real Estate Calc",
+  "name": "Real Estate ROI Calculator",
   "description": "Calculate rental property ROI, cashflow, and yield",
   "start_url": "/",
   "display": "standalone",

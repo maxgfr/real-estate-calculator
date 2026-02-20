@@ -1,11 +1,16 @@
 import {
+  getLTV,
   getTotalMortgageInterest,
   getMonthlyMortgagePayment,
   getTotalMortgageCost,
   getNetMonthlyIncome,
+  getNetMonthlyIncomeDetailed,
   getTotalPurchasePrice,
   getYield,
   getDownPayment,
+  getTotalOperationCost,
+  getCashOnCash,
+  getBreakEvenRent,
 } from './index';
 
 describe('getMonthlyMortgagePayment', () => {
@@ -41,18 +46,15 @@ describe('getTotalMortgageInterest', () => {
   it('should calculate total interest correctly', () => {
     // Example: $168,000 loan over 20 years with $972 monthly payment
     const result = getTotalMortgageInterest('168000', '20', '972');
-    // Principal only: 168000 / 240 = 700
-    // Interest only: 972 - 700 = 272
-    // Total interest: 272 * 240 = 65280
+    // Total interest = (monthly payment × total months) - loan amount
+    // = 972 * 240 - 168000 = 233280 - 168000 = 65280
     expect(result).toBe('65280');
   });
 
   it('should handle zero monthly payment', () => {
     const result = getTotalMortgageInterest('100000', '20', '0');
-    // Principal only: 100000 / 240 = 416.67
-    // Interest: 0 - 416.67 = -416.67
-    // Total: -416.67 * 240 ≈ -100000
-    expect(Number(result)).toBeCloseTo(-100000, 0);
+    // Total interest = 0 * 240 - 100000 = -100000 → negative interest not possible, return '0'
+    expect(result).toBe('0');
   });
 });
 
@@ -147,6 +149,144 @@ describe('getDownPayment', () => {
     const result = getDownPayment('200000', '168000');
     // 168000 - 200000 = -32000
     expect(result).toBe('-32000');
+  });
+});
+
+describe('getNetMonthlyIncomeDetailed', () => {
+  it('should match getNetMonthlyIncomeMixed when extra expenses are zero', () => {
+    // rent=1000, charges=100, propertyTax=1200 (100/mo), vacancy=0%, mgmt=0%, insurance=0, maintenance=0
+    const result = getNetMonthlyIncomeDetailed('1000', '100', '1200', '0', '0', '0', '0');
+    // 1000 - 100 - 100 = 800
+    expect(result).toBe('800');
+  });
+
+  it('should apply vacancy rate correctly', () => {
+    // rent=1000, vacancy=5% → effective rent = 950, no other expenses
+    const result = getNetMonthlyIncomeDetailed('1000', '0', '0', '0', '0', '0', '5');
+    expect(result).toBe('950');
+  });
+
+  it('should apply management fees as % of effective rent', () => {
+    // rent=1000, vacancy=0%, mgmt=8% → fees = 80
+    const result = getNetMonthlyIncomeDetailed('1000', '0', '0', '0', '8', '0', '0');
+    // 1000 - 80 = 920
+    expect(result).toBe('920');
+  });
+
+  it('should deduct all expenses correctly', () => {
+    // rent=1000, charges=80, tax=1200/yr(100/mo), insurance=30, mgmt=7%, maintenance=50, vacancy=5%
+    // effectiveRent = 1000 * 0.95 = 950
+    // mgmtFees = 950 * 0.07 = 66.5
+    // net = 950 - 80 - 100 - 30 - 66.5 - 50 = 623.5 → 624 (rounded)
+    const result = getNetMonthlyIncomeDetailed('1000', '80', '1200', '30', '7', '50', '5');
+    expect(Number(result)).toBeCloseTo(624, 0);
+  });
+
+  it('should handle zero rent', () => {
+    const result = getNetMonthlyIncomeDetailed('0', '80', '1200', '30', '7', '50', '5');
+    // effectiveRent = 0, net = 0 - 80 - 100 - 30 - 0 - 50 = -260
+    expect(result).toBe('-260');
+  });
+
+  it('should handle NaN inputs gracefully', () => {
+    const result = getNetMonthlyIncomeDetailed('invalid', '80', '1200', '30', '7', '50', '5');
+    expect(result).toBe('0');
+  });
+});
+
+describe('getTotalOperationCost', () => {
+  it('should sum total investment and total interest', () => {
+    // 162000 investment + 58800 interest = 220800
+    const result = getTotalOperationCost('162000', '58800');
+    expect(result).toBe('220800');
+  });
+
+  it('should handle zero interest', () => {
+    const result = getTotalOperationCost('162000', '0');
+    expect(result).toBe('162000');
+  });
+
+  it('should handle NaN inputs', () => {
+    const result = getTotalOperationCost('invalid', '58800');
+    expect(result).toBe('0');
+  });
+});
+
+describe('getCashOnCash', () => {
+  it('should calculate cash-on-cash return correctly', () => {
+    // annual cashflow = -4692, down payment = 12000
+    // (-4692 / 12000) * 100 = -39.1
+    const result = getCashOnCash('-4692', '12000');
+    expect(Number(result)).toBeCloseTo(-39.1, 0);
+  });
+
+  it('should return 0 when down payment is zero', () => {
+    const result = getCashOnCash('-4692', '0');
+    expect(result).toBe('0');
+  });
+
+  it('should handle positive cashflow', () => {
+    // annual cashflow = 2400, down payment = 20000
+    // (2400 / 20000) * 100 = 12.0
+    const result = getCashOnCash('2400', '20000');
+    expect(Number(result)).toBeCloseTo(12.0, 0);
+  });
+
+  it('should handle NaN inputs', () => {
+    const result = getCashOnCash('invalid', '12000');
+    expect(result).toBe('0');
+  });
+});
+
+describe('getBreakEvenRent', () => {
+  it('should calculate break-even rent with no vacancy', () => {
+    // costs=150, tax=1200(100/mo), mortgage=870, vacancy=0%
+    // (150 + 100 + 870) / 1 = 1120
+    const result = getBreakEvenRent('150', '1200', '870', '0');
+    expect(result).toBe('1120');
+  });
+
+  it('should account for vacancy rate', () => {
+    // costs=150, tax=1200(100/mo), mortgage=870, vacancy=5%
+    // (150 + 100 + 870) / 0.95 = 1178.9 ≈ 1179
+    const result = getBreakEvenRent('150', '1200', '870', '5');
+    expect(Number(result)).toBeCloseTo(1179, 0);
+  });
+
+  it('should return 0 when vacancy rate is 100%', () => {
+    const result = getBreakEvenRent('150', '1200', '870', '100');
+    expect(result).toBe('0');
+  });
+
+  it('should handle zero costs', () => {
+    // only mortgage, no vacancy: break-even = mortgage payment
+    const result = getBreakEvenRent('0', '0', '870', '0');
+    expect(result).toBe('870');
+  });
+
+  it('should handle NaN inputs', () => {
+    const result = getBreakEvenRent('invalid', '1200', '870', '5');
+    expect(result).toBe('0');
+  });
+});
+
+describe('getLTV', () => {
+  it('should calculate LTV correctly', () => {
+    // 150000 loan on 150000 purchase = 100%
+    expect(getLTV('150000', '150000')).toBe('100.0');
+  });
+
+  it('should calculate partial LTV', () => {
+    // 120000 loan on 200000 purchase = 60%
+    expect(getLTV('120000', '200000')).toBe('60.0');
+  });
+
+  it('should return 0 for zero purchase price', () => {
+    expect(getLTV('150000', '0')).toBe('0');
+  });
+
+  it('should handle NaN inputs', () => {
+    expect(getLTV('invalid', '200000')).toBe('0');
   });
 });
 

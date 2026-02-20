@@ -5,10 +5,8 @@ export const getTotalMortgageInterest = (
   decimal = 0
 ): string => {
   const months = Number(loanDurationYears) * 12;
-  const principalOnly = Number(loanAmount) / months;
-  const interestOnly = Number(monthlyPayment) - principalOnly;
-  const totalInterest = interestOnly * months;
-  return isNaN(totalInterest) ? "0" : totalInterest.toFixed(decimal);
+  const totalInterest = Number(monthlyPayment) * months - Number(loanAmount);
+  return isNaN(totalInterest) || totalInterest < 0 ? "0" : totalInterest.toFixed(decimal);
 };
 
 export const getMonthlyMortgagePayment = (
@@ -68,6 +66,39 @@ export const getNetMonthlyIncomeMixed = (
   return Number.isNaN(monthly) ? "0" : monthly.toFixed(decimal);
 };
 
+/**
+ * Complete net monthly income calculation including:
+ * - Vacancy rate (reduces effective rent)
+ * - Non-recoverable charges (building fees)
+ * - Annual property tax (prorated monthly)
+ * - Monthly insurance
+ * - Property management fees (% of effective rent)
+ * - Monthly maintenance budget
+ */
+export const getNetMonthlyIncomeDetailed = (
+  monthlyRent: string | number,
+  monthlyCharges: string | number,
+  annualPropertyTax: string | number,
+  monthlyInsurance: string | number,
+  managementRatePercent: string | number,
+  monthlyMaintenance: string | number,
+  vacancyRatePercent: string | number,
+  decimal = 0
+): string => {
+  const effectiveRent =
+    Number(monthlyRent) * (1 - Number(vacancyRatePercent) / 100);
+  const managementFees =
+    effectiveRent * (Number(managementRatePercent) / 100);
+  const monthly =
+    effectiveRent -
+    Number(monthlyCharges) -
+    Number(annualPropertyTax) / 12 -
+    Number(monthlyInsurance) -
+    managementFees -
+    Number(monthlyMaintenance);
+  return Number.isNaN(monthly) ? "0" : monthly.toFixed(decimal);
+};
+
 export const getTotalPurchasePrice = (
   propertyPrice: string | number,
   notaryFees: string | number,
@@ -96,4 +127,50 @@ export const getDownPayment = (
 ): string => {
   const downPayment = Number(totalCost) - Number(loanAmount);
   return isNaN(downPayment) ? "0" : downPayment.toFixed(0);
+};
+
+export const getTotalOperationCost = (
+  totalInvestment: string | number,
+  totalInterest: string | number,
+  decimal = 0
+): string => {
+  const total = Number(totalInvestment) + Number(totalInterest);
+  return isNaN(total) ? '0' : total.toFixed(decimal);
+};
+
+export const getCashOnCash = (
+  annualCashflow: string | number,
+  downPayment: string | number,
+  decimal = 1
+): string => {
+  const dp = Number(downPayment);
+  if (dp === 0) return '0';
+  const pct = (Number(annualCashflow) / dp) * 100;
+  return isNaN(pct) || !isFinite(pct) ? '0' : pct.toFixed(decimal);
+};
+
+export const getBreakEvenRent = (
+  monthlyCosts: string | number,
+  annualPropertyTax: string | number,
+  monthlyMortgage: string | number,
+  vacancyRatePercent: string | number,
+  decimal = 0
+): string => {
+  const denominator = 1 - Number(vacancyRatePercent) / 100;
+  if (denominator <= 0) return '0';
+  const rent =
+    (Number(monthlyCosts) +
+      Number(annualPropertyTax) / 12 +
+      Number(monthlyMortgage)) /
+    denominator;
+  return isNaN(rent) ? '0' : rent.toFixed(decimal);
+};
+
+export const getLTV = (
+  loanAmount: string | number,
+  purchasePrice: string | number,
+  decimal = 1
+): string => {
+  const ltv = (Number(loanAmount) / Number(purchasePrice)) * 100;
+  return isNaN(ltv) || !isFinite(ltv) ? '0' : ltv.toFixed(decimal);
 };

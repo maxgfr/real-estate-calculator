@@ -22,50 +22,80 @@ import {
   StatLabel,
   StatNumber,
   Text,
+  Tooltip,
   useColorMode,
   useColorModeValue,
   VStack,
 } from "@chakra-ui/react";
-import { MoonIcon, SunIcon } from "@chakra-ui/icons";
+import { InfoOutlineIcon, MoonIcon, SunIcon } from "@chakra-ui/icons";
 
 import {
   getDownPayment,
   getTotalMortgageInterest,
   getMonthlyMortgagePayment,
-  getNetMonthlyIncomeMixed,
+  getNetMonthlyIncomeDetailed,
   getTotalMortgageCost,
   getTotalPurchasePrice,
   getYield,
+  getTotalOperationCost,
+  getCashOnCash,
+  getBreakEvenRent,
+  getLTV,
 } from "../utils";
 
-const sections = [
+type Key =
+  | "housingPrice"
+  | "notaryFees"
+  | "houseWorks"
+  | "bankLoan"
+  | "bankRate"
+  | "bankLoanPeriod"
+  | "rent"
+  | "propertyTax"
+  | "monthlyCosts"
+  | "vacancyRate";
+
+type Field = {
+  key: Key;
+  name: string;
+  step: number;
+  placeholder: string;
+  min?: number;
+  max?: number;
+};
+
+type Section = {
+  title: string;
+  fields: Field[];
+};
+
+const sections: Section[] = [
   {
     title: "Property 🏠",
     fields: [
-      { key: "housingPrice", name: "Purchase price", step: 10000 },
-      { key: "notaryFees", name: "Closing costs", step: 1000 },
-      { key: "houseWorks", name: "Renovation budget", step: 1000 },
+      { key: "housingPrice", name: "Purchase price", step: 10000, placeholder: "e.g. 150,000", min: 0 },
+      { key: "notaryFees", name: "Closing costs (notary, agency...)", step: 1000, placeholder: "e.g. 12,000", min: 0 },
+      { key: "houseWorks", name: "Renovation budget", step: 1000, placeholder: "0", min: 0 },
     ],
   },
   {
     title: "Mortgage 💳",
     fields: [
-      { key: "bankLoan", name: "Loan amount", step: 10000 },
-      { key: "bankRate", name: "Interest rate", step: 0.1 },
-      { key: "bankLoanPeriod", name: "Loan term", step: 1 },
+      { key: "bankLoan", name: "Loan amount", step: 10000, placeholder: "e.g. 150,000", min: 0 },
+      { key: "bankRate", name: "Interest rate (%)", step: 0.1, placeholder: "e.g. 3.5", min: 0, max: 20 },
+      { key: "bankLoanPeriod", name: "Loan term (years)", step: 1, placeholder: "e.g. 20", min: 1, max: 50 },
     ],
   },
   {
-    title: "Rental Income 💰",
+    title: "Rental 💰",
     fields: [
-      { key: "rent", name: "Monthly rent", step: 100 },
-      { key: "rentalCharges", name: "Monthly building fees", step: 50 },
-      { key: "propertyTax", name: "Annual property tax", step: 100 },
+      { key: "rent", name: "Monthly rent", step: 100, placeholder: "e.g. 750", min: 0 },
+      { key: "propertyTax", name: "Annual property tax", step: 100, placeholder: "e.g. 1,000", min: 0 },
+      { key: "monthlyCosts", name: "Monthly costs (charges, insurance, maintenance...)", step: 50, placeholder: "e.g. 150", min: 0 },
+      { key: "vacancyRate", name: "Vacancy rate (%)", step: 1, placeholder: "e.g. 5", min: 0, max: 100 },
     ],
   },
-] as const;
-
-type Key = (typeof sections)[number]["fields"][number]["key"];
+];
 
 type State = {
   [key in Key]: string | number;
@@ -86,15 +116,16 @@ const formatPercent = (value: string): string =>
   }) + " %";
 
 const defaultState: State = {
-  housingPrice: "",
-  notaryFees: "",
-  houseWorks: "",
-  bankLoan: "",
-  bankRate: "",
-  bankLoanPeriod: "",
-  rent: "",
-  rentalCharges: "",
-  propertyTax: "",
+  housingPrice: 150000,
+  notaryFees: 12000,
+  houseWorks: 0,
+  bankLoan: 150000,
+  bankRate: 3.5,
+  bankLoanPeriod: 20,
+  rent: 750,
+  propertyTax: 1000,
+  monthlyCosts: 150,
+  vacancyRate: 5,
 };
 
 const Home: NextPage = () => {
@@ -126,11 +157,25 @@ const Home: NextPage = () => {
   const textRevenu = useColorModeValue("green.700", "green.400");
   const textInterest = useColorModeValue("red.600", "red.400");
 
+  // Sync state from URL when query params are present
   useEffect(() => {
     if (Object.keys(router.query).length > 0) {
       setState({ ...defaultState, ...(router.query as unknown as State) });
     }
   }, [router.query]);
+
+  // On first load with no params, push defaults to URL so it's shareable
+  useEffect(() => {
+    if (!router.isReady) return;
+    if (Object.keys(router.query).length === 0) {
+      void router.replace(
+        { query: defaultState as unknown as Record<string, string> },
+        undefined,
+        { shallow: true }
+      );
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.isReady]);
 
   const onChangeState = (key: string, value: string) => {
     const newState = { ...state, [key]: value };
@@ -175,8 +220,17 @@ const Home: NextPage = () => {
   );
 
   const netMonthlyIncome = useMemo(
-    () => getNetMonthlyIncomeMixed(state.rent, state.rentalCharges, state.propertyTax),
-    [state.rent, state.rentalCharges, state.propertyTax]
+    () =>
+      getNetMonthlyIncomeDetailed(
+        state.rent,
+        state.monthlyCosts,
+        state.propertyTax,
+        "0",
+        "0",
+        "0",
+        state.vacancyRate
+      ),
+    [state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate]
   );
 
   const grossYield = useMemo(
@@ -194,9 +248,33 @@ const Home: NextPage = () => {
     return Number.isNaN(monthly) ? "0" : monthly.toFixed(0);
   }, [netMonthlyIncome, monthlyMortgagePayment]);
 
+  const totalOperationCost = useMemo(
+    () => getTotalOperationCost(totalPrice, totalMortgageInterest),
+    [totalPrice, totalMortgageInterest]
+  );
+
+  const cashOnCash = useMemo(
+    () => getCashOnCash(Number(cashflow) * 12, downPayment),
+    [cashflow, downPayment]
+  );
+
+  const breakEvenRent = useMemo(
+    () => getBreakEvenRent(state.monthlyCosts, state.propertyTax, monthlyMortgagePayment, state.vacancyRate),
+    [state.monthlyCosts, state.propertyTax, monthlyMortgagePayment, state.vacancyRate]
+  );
+
+  const ltv = useMemo(
+    () => getLTV(state.bankLoan, state.housingPrice),
+    [state.bankLoan, state.housingPrice]
+  );
+
   const onReset = () => {
     setState(defaultState);
-    void router.replace({ query: {} }, undefined, { shallow: true });
+    void router.replace(
+      { query: defaultState as unknown as Record<string, string> },
+      undefined,
+      { shallow: true }
+    );
   };
 
   const onExport = () => {
@@ -236,10 +314,14 @@ const Home: NextPage = () => {
     XLSX.utils.book_append_sheet(workbook, mortgageSheet, "Mortgage");
 
     // Rental sheet
+    const effectiveRent =
+      stripCurrency(String(state.rent)) * (1 - Number(state.vacancyRate) / 100);
     const rentalData = [
       ["Item", "Amount (Monthly)", "Amount (Annual)"],
-      ["Monthly rent", stripCurrency(String(state.rent)), stripCurrency(String(state.rent)) * 12],
-      ["Monthly building fees", stripCurrency(String(state.rentalCharges)), stripCurrency(String(state.rentalCharges)) * 12],
+      ["Gross rent", stripCurrency(String(state.rent)), stripCurrency(String(state.rent)) * 12],
+      ["Vacancy rate", `${Number(state.vacancyRate)} %`, ""],
+      ["Effective rent (after vacancy)", effectiveRent, effectiveRent * 12],
+      ["Monthly costs (charges, insurance, maintenance)", stripCurrency(String(state.monthlyCosts)), stripCurrency(String(state.monthlyCosts)) * 12],
       ["Property tax", stripCurrency(String(state.propertyTax)) / 12, stripCurrency(String(state.propertyTax))],
       ["Net monthly income", stripCurrency(netMonthlyIncome), stripCurrency(netMonthlyIncome) * 12],
     ];
@@ -248,13 +330,16 @@ const Home: NextPage = () => {
 
     // Results sheet
     const resultsData = [
-      ["Metric", "Value"],
-      ["Total investment cost", stripCurrency(totalPrice)],
-      ["Down payment", stripCurrency(downPayment)],
-      ["Monthly cashflow", stripCurrency(cashflow)],
-      ["Annual cashflow", stripCurrency(cashflow) * 12],
+      ["Metric", "Value", "Note"],
+      ["Total investment cost", stripCurrency(totalPrice), ""],
+      ["Down payment", stripCurrency(downPayment), ""],
+      ["Monthly mortgage payment", stripCurrency(monthlyMortgagePayment), ""],
+      ["Net monthly income (all-in)", stripCurrency(netMonthlyIncome), "After all expenses"],
+      ["Monthly cashflow", stripCurrency(cashflow), "Net income - Mortgage"],
+      ["Annual cashflow", stripCurrency(cashflow) * 12, ""],
       ["Gross yield", stripPercent(grossYield) / 100, "Format: decimal"],
       ["Net yield", stripPercent(netYield) / 100, "Format: decimal"],
+      ["Total interest paid", stripCurrency(totalMortgageInterest), ""],
     ];
     const resultsSheet = XLSX.utils.aoa_to_sheet(resultsData);
     XLSX.utils.book_append_sheet(workbook, resultsSheet, "Results");
@@ -271,12 +356,12 @@ const Home: NextPage = () => {
       paddingY={{ base: "16px", md: "32px" }}
     >
       <Head>
-        <title>Estate Calc - Real Estate ROI Calculator</title>
+        <title>Real Estate ROI Calculator</title>
         <meta
           name="description"
           content="Calculate rental property ROI, cashflow, and yield. Free Excel export. Make smarter real estate investment decisions."
         />
-        <meta name="keywords" content="real estate calculator, rental yield, cashflow calculator, mortgage calculator, investment property ROI, landlord tools" />
+        <meta name="keywords" content="Real Estate ROI Calculator, rental yield, cashflow calculator, mortgage calculator, investment property ROI, landlord tools" />
         <link rel="canonical" href="https://maxgfr.github.io/real-estate-calculator/" />
 
         {/* Favicon and Icons */}
@@ -286,14 +371,14 @@ const Home: NextPage = () => {
 
         {/* Open Graph */}
         <meta property="og:type" content="website" />
-        <meta property="og:title" content="Estate Calc - Real Estate ROI Calculator" />
+        <meta property="og:title" content="Real Estate ROI Calculator" />
         <meta property="og:description" content="Calculate rental property ROI, cashflow, and yield. Free Excel export. Make smarter real estate investment decisions." />
         <meta property="og:url" content="https://maxgfr.github.io/real-estate-calculator/" />
         <meta property="og:locale" content="en_US" />
 
         {/* Twitter Card */}
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Estate Calc - Real Estate ROI Calculator" />
+        <meta name="twitter:title" content="Real Estate ROI Calculator" />
         <meta name="twitter:description" content="Calculate rental property ROI, cashflow, and yield. Free Excel export." />
 
         {/* JSON-LD Structured Data */}
@@ -303,7 +388,7 @@ const Home: NextPage = () => {
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebApplication",
-              "name": "Estate Calc - Real Estate ROI Calculator",
+              "name": "Real Estate ROI Calculator",
               "description": "Calculate rental property ROI, cashflow, and yield. Free Excel export for real estate investors.",
               "url": "https://maxgfr.github.io/real-estate-calculator/",
               "applicationCategory": "FinanceApplication",
@@ -335,7 +420,7 @@ const Home: NextPage = () => {
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "SoftwareApplication",
-              "name": "Estate Calc",
+              "name": "Real Estate ROI Calculator",
               "applicationCategory": "FinanceApplication",
               "operatingSystem": "Web",
               "offers": {
@@ -405,7 +490,12 @@ const Home: NextPage = () => {
             >
               <Stat>
                 <StatLabel fontSize="sm" color={textLabel}>
-                  Monthly cashflow
+                  <HStack spacing={1} display="inline-flex">
+                    <span>Monthly cashflow</span>
+                    <Tooltip shouldWrapChildren label="Net monthly income − monthly mortgage payment. Positive means the property pays for itself." fontSize="xs" placement="top" hasArrow maxW="240px">
+                      <InfoOutlineIcon boxSize="10px" cursor="help" opacity={0.6} />
+                    </Tooltip>
+                  </HStack>
                 </StatLabel>
                 <StatNumber
                   fontSize={{ base: "3xl", md: "4xl" }}
@@ -416,8 +506,9 @@ const Home: NextPage = () => {
                 >
                   {formatCurrency(cashflow)}
                 </StatNumber>
-                <StatHelpText>
-                  {Number(cashflow) >= 0 ? "✨ Positive" : "⚠️ Negative"}
+                <StatHelpText as="div">
+                  <Box>{Number(cashflow) >= 0 ? "✨ Positive" : "⚠️ Negative"}</Box>
+                  <Box fontSize="xs" mt={0.5}>Annual: {formatCurrency(String(Number(cashflow) * 12))}</Box>
                 </StatHelpText>
               </Stat>
             </Box>
@@ -434,7 +525,12 @@ const Home: NextPage = () => {
             >
               <Stat>
                 <StatLabel fontSize="sm" color={textLabel}>
-                  Net yield
+                  <HStack spacing={1} display="inline-flex">
+                    <span>Net yield</span>
+                    <Tooltip shouldWrapChildren label="(Net annual income / Total investment) × 100. Accounts for vacancy, costs and taxes. Target: >5% excellent, 3-5% good." fontSize="xs" placement="top" hasArrow maxW="240px">
+                      <InfoOutlineIcon boxSize="10px" cursor="help" opacity={0.6} />
+                    </Tooltip>
+                  </HStack>
                 </StatLabel>
                 <StatNumber
                   fontSize="2xl"
@@ -459,31 +555,42 @@ const Home: NextPage = () => {
                 Summary 📊
               </Text>
               <VStack spacing={2} align="stretch">
+                <SectionLabel label="Investment" />
+                <FlexRow label="Total investment" value={formatCurrency(totalPrice)} tooltip="Purchase price + closing costs + renovation budget" />
+                <FlexRow label="Down payment" value={formatCurrency(downPayment)} tooltip="Total investment − loan amount. The cash you put in upfront." />
+                <FlexRow label="Loan-to-Value (LTV)" value={formatPercent(ltv)} tooltip="(Loan amount / Purchase price) × 100. Banks typically require LTV ≤ 80%. Higher LTV = more leveraged." color={Number(ltv) > 90 ? textCashflowNegative : Number(ltv) > 80 ? textInterest : undefined} />
+
+                <SectionLabel label="Credit" />
+                <FlexRow label="Monthly payment" value={formatCurrency(monthlyMortgagePayment)} tooltip="Fixed monthly mortgage payment: P × [t(1+t)^n] / [(1+t)^n − 1]" />
+                <FlexRow label="Interest paid" value={formatCurrency(totalMortgageInterest)} color={textInterest} tooltip="Total interest paid to the bank over the full loan term." />
+                <FlexRow label="Total repaid" value={formatCurrency(totalMortgageCost)} tooltip="Loan amount + total interest paid. What you actually pay back to the bank." />
+                <FlexRow label="Total operation cost" value={formatCurrency(totalOperationCost)} tooltip="Total investment + total interest paid. The true all-in cost of the operation." />
+
+                <SectionLabel label="Rental" />
+                <FlexRow label="Net monthly income" value={formatCurrency(netMonthlyIncome)} color={textRevenu} tooltip="Effective rent (gross rent × (1 − vacancy rate)) − monthly costs − property tax / 12" />
                 <FlexRow
-                  label="Total investment cost"
-                  value={formatCurrency(totalPrice)}
+                  label="Monthly cashflow"
+                  value={formatCurrency(cashflow)}
+                  color={Number(cashflow) >= 0 ? textCashflowPositive : textCashflowNegative}
+                  tooltip="Net monthly income − monthly mortgage payment. Positive means the property pays for itself."
                 />
                 <FlexRow
-                  label="Down payment"
-                  value={formatCurrency(downPayment)}
+                  label="Annual cashflow"
+                  value={formatCurrency(String(Number(cashflow) * 12))}
+                  color={Number(cashflow) >= 0 ? textCashflowPositive : textCashflowNegative}
+                  tooltip="Monthly cashflow × 12. Total gain or loss per year after all costs and mortgage."
                 />
+                <FlexRow label="Break-even rent" value={formatCurrency(breakEvenRent)} tooltip="Minimum monthly rent to reach zero cashflow: (costs + tax/12 + mortgage) / (1 − vacancy rate)" />
+
+                <SectionLabel label="Performance" />
+                <FlexRow label="Gross yield" value={formatPercent(grossYield)} tooltip="(Annual rent / Total investment) × 100. Does not account for expenses — use net yield for a realistic view." />
+                <FlexRow label="Net yield" value={formatPercent(netYield)} color={Number(netYield) >= 3 ? textRendementBon : textRendementFaible} tooltip="(Net annual income / Total investment) × 100. More realistic than gross yield — accounts for vacancy, costs and taxes. Target: >5% excellent, 3-5% good." />
                 <FlexRow
-                  label="Monthly mortgage payment"
-                  value={formatCurrency(monthlyMortgagePayment)}
+                  label="Cash-on-cash return"
+                  value={formatPercent(cashOnCash)}
+                  color={Number(cashOnCash) >= 0 ? textCashflowPositive : textCashflowNegative}
+                  tooltip="(Annual cashflow / Down payment) × 100. The actual return on the cash you invested. Target: >8% excellent, 4-8% good."
                 />
-                <FlexRow
-                  label="Net monthly rental income"
-                  value={formatCurrency(netMonthlyIncome)}
-                  color={textRevenu}
-                />
-                <FlexRow label="Gross yield" value={formatPercent(grossYield)} />
-                <Box borderTopWidth="1px" pt={2} mt={2} borderColor={borderInput}>
-                  <FlexRow
-                    label="Total interest"
-                    value={formatCurrency(totalMortgageInterest)}
-                    color={textInterest}
-                  />
-                </Box>
               </VStack>
             </Box>
           </VStack>
@@ -513,7 +620,7 @@ const Home: NextPage = () => {
                   {section.title}
                 </Text>
                 <VStack spacing={4}>
-                  {section.fields.map(({ key, name, step }) => (
+                  {section.fields.map(({ key, name, step, placeholder, min, max }) => (
                     <FormControl key={key}>
                       <FormLabel fontSize="sm" color={textLabel} mb={1}>
                         {name}
@@ -522,7 +629,9 @@ const Home: NextPage = () => {
                         type="number"
                         value={state[key]}
                         onChange={(e) => onChangeState(key, e.target.value)}
-                        min={0}
+                        placeholder={placeholder}
+                        min={min ?? 0}
+                        max={max}
                         step={step}
                         size="md"
                         borderRadius="md"
@@ -543,12 +652,26 @@ const Home: NextPage = () => {
   );
 };
 
+const SectionLabel: React.FC<{ label: string }> = ({ label }) => {
+  const color = useColorModeValue("gray.400", "gray.500");
+  const borderColor = useColorModeValue("gray.100", "gray.700");
+  return (
+    <Box borderTopWidth="1px" borderColor={borderColor} pt={2} mt={1}>
+      <Text fontSize="xs" fontWeight="bold" color={color} textTransform="uppercase" letterSpacing="wider">
+        {label}
+      </Text>
+    </Box>
+  );
+};
+
 const FlexRow: React.FC<{
   label: string;
   value: string;
   color?: string;
-}> = ({ label, value, color }) => {
+  tooltip?: string;
+}> = ({ label, value, color, tooltip }) => {
   const labelColor = useColorModeValue("gray.600", "gray.400");
+  const iconColor = useColorModeValue("gray.300", "gray.600");
   const defaultColor = useColorModeValue("gray.900", "gray.100");
   const valueColor = color ?? defaultColor;
   return (
@@ -558,7 +681,14 @@ const FlexRow: React.FC<{
       alignItems="center"
       fontSize="sm"
     >
-      <Text color={labelColor}>{label}</Text>
+      <HStack spacing={1}>
+        <Text color={labelColor}>{label}</Text>
+        {tooltip && (
+          <Tooltip shouldWrapChildren label={tooltip} fontSize="xs" placement="top" hasArrow maxW="240px">
+            <InfoOutlineIcon boxSize="10px" color={iconColor} cursor="help" />
+          </Tooltip>
+        )}
+      </HStack>
       <Text fontWeight="semibold" color={valueColor}>
         {value}
       </Text>
