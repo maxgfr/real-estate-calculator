@@ -328,6 +328,54 @@ const Home: NextPage = () => {
     [state.housingPrice, state.rent]
   );
 
+  const projections = useMemo(() => {
+    const period = Number(state.bankLoanPeriod);
+    const appRate = Number(state.appreciationRate);
+    const rentRate = Number(state.rentIncreaseRate);
+    const rent = Number(state.rent);
+    const costs = Number(state.monthlyCosts);
+    const tax = Number(state.propertyTax);
+    const vacancy = Number(state.vacancyRate);
+    const mortgage = Number(monthlyMortgagePayment);
+    const dp = Number(downPayment);
+    const base = Number(state.housingPrice) + Number(state.houseWorks);
+
+    if (period <= 0 || isNaN(base)) return null;
+
+    // Property value at loan end (with appreciation)
+    const propertyValue = Math.round(base * Math.pow(1 + appRate / 100, period));
+
+    // Projected monthly rent at loan end
+    const rentAtEnd = Math.round(rent * Math.pow(1 + rentRate / 100, period));
+
+    // Monthly cashflow AFTER loan (no more mortgage, rent has grown)
+    const effectiveRentAfter = rentAtEnd * (1 - vacancy / 100);
+    const cashflowAfterLoan = Math.round(effectiveRentAfter - costs - tax / 12);
+
+    // Cumulative cashflow over loan period
+    let cumulativeCF = -dp;
+    for (let y = 1; y <= period; y++) {
+      const r = rent * Math.pow(1 + rentRate / 100, y - 1);
+      const eff = r * (1 - vacancy / 100);
+      const net = eff - costs - tax / 12;
+      cumulativeCF += (net - mortgage) * 12;
+    }
+
+    // Total return = equity (property value, loan repaid) + cumulative cashflow
+    const totalReturn = Math.round(propertyValue + cumulativeCF);
+
+    return {
+      propertyValue,
+      rentAtEnd,
+      cashflowAfterLoan,
+      cumulativeCashflow: Math.round(cumulativeCF),
+      totalReturn,
+      hasAppreciation: appRate !== 0,
+      hasRentIncrease: rentRate !== 0,
+      period,
+    };
+  }, [state.bankLoanPeriod, state.appreciationRate, state.rentIncreaseRate, state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, monthlyMortgagePayment, downPayment, state.housingPrice, state.houseWorks]);
+
   const onReset = () => {
     setState(defaultState);
     setCurrency("EUR");
@@ -406,6 +454,13 @@ const Home: NextPage = () => {
       ["GRM", Number(grm), "Gross Rent Multiplier"],
       ["Appreciation rate", `${Number(state.appreciationRate)} %`, "Annual (property value)"],
       ["Rent increase rate", `${Number(state.rentIncreaseRate)} %`, "Annual"],
+      ["", "", ""],
+      ["--- Projections ---", "", `At year ${projections?.period ?? Number(state.bankLoanPeriod)}`],
+      ["Property value at loan end", projections?.propertyValue ?? 0, "Including appreciation"],
+      ["Monthly rent at loan end", projections?.rentAtEnd ?? 0, "Including rent increases"],
+      ["Cashflow after loan (monthly)", projections?.cashflowAfterLoan ?? 0, "Passive income, no mortgage"],
+      ["Cumulative cashflow", projections?.cumulativeCashflow ?? 0, "Over full loan period"],
+      ["Total return", projections?.totalReturn ?? 0, "Equity + cumulative cashflow"],
     ];
     const resultsSheet = XLSX.utils.aoa_to_sheet(resultsData);
     XLSX.utils.book_append_sheet(workbook, resultsSheet, "Results");
@@ -683,8 +738,8 @@ const Home: NextPage = () => {
                 <FlexRow
                   label="DSCR"
                   value={dscr}
-                  color={Number(dscr) >= 1.25 ? textRendementBon : Number(dscr) >= 1 ? textInterest : textCashflowNegative}
-                  tooltip="Debt Service Coverage Ratio = Net income / Mortgage payment. Banks require ≥ 1.25. Above 1.0 means the property covers its debt."
+                  color={Number(dscr) >= 1.25 ? textRendementBon : Number(dscr) >= 1 ? undefined : textCashflowNegative}
+                  tooltip="Debt Service Coverage Ratio = Net income / Mortgage payment. ≥ 1.25 excellent, ≥ 1.0 covers debt, < 1.0 deficit."
                 />
                 <FlexRow
                   label="GRM"
@@ -692,6 +747,44 @@ const Home: NextPage = () => {
                   color={Number(grm) <= 15 ? textRendementBon : Number(grm) <= 20 ? textRendementFaible : textCashflowNegative}
                   tooltip="Gross Rent Multiplier = Purchase price / Annual gross rent. Lower is better. < 15 = good deal, 15-20 = average, > 20 = expensive."
                 />
+
+                {projections && (
+                  <>
+                    <SectionLabel label={`Projections (year ${projections.period})`} />
+                    {projections.hasAppreciation && (
+                      <FlexRow
+                        label="Property value"
+                        value={formatCurrency(String(projections.propertyValue))}
+                        tooltip={`Projected property value after ${projections.period} years at ${state.appreciationRate}%/yr appreciation.`}
+                      />
+                    )}
+                    {projections.hasRentIncrease && (
+                      <FlexRow
+                        label="Monthly rent"
+                        value={formatCurrency(String(projections.rentAtEnd))}
+                        tooltip={`Projected monthly rent after ${projections.period} years at ${state.rentIncreaseRate}%/yr increase.`}
+                      />
+                    )}
+                    <FlexRow
+                      label="Cashflow after loan"
+                      value={formatCurrency(String(projections.cashflowAfterLoan))}
+                      color={projections.cashflowAfterLoan >= 0 ? textCashflowPositive : textCashflowNegative}
+                      tooltip="Monthly passive income once the loan is fully repaid (no more mortgage). Uses projected rent if annual increase is set."
+                    />
+                    <FlexRow
+                      label="Cumulative cashflow"
+                      value={formatCurrency(String(projections.cumulativeCashflow))}
+                      color={projections.cumulativeCashflow >= 0 ? textCashflowPositive : textCashflowNegative}
+                      tooltip={`Total cashflow accumulated over ${projections.period} years, including initial down payment.`}
+                    />
+                    <FlexRow
+                      label="Total return"
+                      value={formatCurrency(String(projections.totalReturn))}
+                      color={projections.totalReturn >= 0 ? textCashflowPositive : textCashflowNegative}
+                      tooltip={`Equity (property value at year ${projections.period}) + cumulative cashflow. The complete picture of your investment.`}
+                    />
+                  </>
+                )}
               </VStack>
             </Box>
           </VStack>
@@ -884,7 +977,7 @@ const formulas = [
   {
     title: "DSCR (Debt Service Coverage Ratio)",
     formula: "DSCR = Net monthly income / Monthly mortgage payment",
-    note: "The ratio banks use. >= 1.25 = good, >= 1.0 = covers debt, < 1.0 = deficit.",
+    note: ">= 1.25 = excellent, >= 1.0 = covers debt (neutral), < 1.0 = deficit.",
   },
   {
     title: "GRM (Gross Rent Multiplier)",
@@ -904,6 +997,11 @@ const formulas = [
   {
     title: "Amortization (per month)",
     formula: "Interest = Remaining balance x Monthly rate\nPrincipal = Monthly payment - Interest\nNew balance = Remaining balance - Principal",
+  },
+  {
+    title: "Cashflow After Loan",
+    formula: "Rent at year N = Monthly rent x (1 + Rent increase / 100)^N\nEffective rent = Rent at year N x (1 - Vacancy / 100)\nCashflow after loan = Effective rent - Monthly costs - Property tax / 12",
+    note: "Monthly passive income once the loan is fully repaid. No more mortgage payment.",
   },
   {
     title: "Annual Cashflow",

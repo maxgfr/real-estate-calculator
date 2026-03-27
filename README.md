@@ -70,6 +70,11 @@ The calculator opens with pre-filled example values — just adjust the numbers 
 | Performance | Cash-on-cash | Annual cashflow / down payment |
 | Performance | DSCR | Net income / mortgage (debt coverage) |
 | Performance | GRM | Purchase price / annual rent (comparison metric) |
+| Projections | Property value | At loan end, with appreciation (if set) |
+| Projections | Monthly rent | At loan end, with rent increase (if set) |
+| Projections | Cashflow after loan | Monthly passive income once mortgage is repaid |
+| Projections | Cumulative cashflow | Total cashflow over loan period including down payment |
+| Projections | Total return | Equity + cumulative cashflow at loan end |
 
 ## Charts
 
@@ -96,7 +101,7 @@ Organized in three sections: **Overview**, **Mortgage**, and **Investment**.
 | Net yield | > 5% | 3-5% | < 3% |
 | Cashflow | Positive | - | Negative |
 | Cash-on-cash | > 8% | 4-8% | < 4% |
-| DSCR | >= 1.25 | 1.0-1.25 | < 1.0 |
+| DSCR | >= 1.25 | >= 1.0 | < 1.0 |
 | GRM | < 15 | 15-20 | > 20 |
 
 ## Shareable URLs
