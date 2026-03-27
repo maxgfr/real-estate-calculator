@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Box, Grid, GridItem, Text, useColorModeValue } from "@chakra-ui/react";
+import { Box, Grid, GridItem, HStack, Text, Tooltip, useColorModeValue } from "@chakra-ui/react";
 import {
   PieChart,
   Pie,
@@ -18,6 +18,8 @@ import {
   ReferenceLine,
   Legend,
 } from "recharts";
+
+type Currency = "EUR" | "USD" | "GBP" | "CHF" | "CAD";
 
 type ChartsProps = {
   housingPrice: number;
@@ -38,6 +40,23 @@ type ChartsProps = {
   downPayment: number;
   appreciationRate: number;
   totalPrice: number;
+  currency: Currency;
+};
+
+const CURRENCY_LOCALE: Record<Currency, string> = {
+  EUR: "fr-FR",
+  USD: "en-US",
+  GBP: "en-GB",
+  CHF: "de-CH",
+  CAD: "en-CA",
+};
+
+const CURRENCY_SYMBOL: Record<Currency, string> = {
+  EUR: "\u20ac",
+  USD: "$",
+  GBP: "\u00a3",
+  CHF: "CHF\u00a0",
+  CAD: "C$",
 };
 
 const PIE_COLORS = ["#4299E1", "#ED8936", "#48BB78", "#9F7AEA"];
@@ -196,41 +215,66 @@ function computeRentSensitivity(
 
 // --- Formatting helpers ---
 
-const formatCurrencyShort = (value: number): string => {
-  if (Math.abs(value) >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(value) >= 1_000) return `$${(value / 1_000).toFixed(0)}k`;
-  return `$${value.toFixed(0)}`;
-};
+function makeFormatCurrencyShort(sym: string) {
+  return (value: number): string => {
+    const sign = value < 0 ? "-" : "";
+    const abs = Math.abs(value);
+    if (abs >= 1_000_000) return `${sign}${sym}${(abs / 1_000_000).toFixed(1)}M`;
+    if (abs >= 1_000) return `${sign}${sym}${(abs / 1_000).toFixed(0)}k`;
+    return `${sign}${sym}${abs.toFixed(0)}`;
+  };
+}
 
-const formatCurrencyFull = (value: number): string =>
-  value.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  });
+function makeFormatCurrencyFull(currency: Currency) {
+  const locale = CURRENCY_LOCALE[currency];
+  return (value: number): string =>
+    value.toLocaleString(locale, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    });
+}
 
 // --- Shared sub-components ---
 
 function ChartCard({
   title,
+  info,
   children,
   bg,
   borderColor,
   titleColor,
 }: {
   title: string;
+  info?: string;
   children: React.ReactNode;
   bg: string;
   borderColor: string;
   titleColor: string;
 }) {
+  const iconColor = useColorModeValue("gray.400", "gray.500");
   return (
     <Box p={4} bg={bg} borderRadius="xl" borderWidth="1px" borderColor={borderColor}>
-      <Text fontWeight="semibold" fontSize="sm" mb={2} color={titleColor}>
-        {title}
-      </Text>
+      <HStack spacing={1} mb={2}>
+        <Text fontWeight="semibold" fontSize="sm" color={titleColor}>
+          {title}
+        </Text>
+        {info && (
+          <Tooltip label={info} fontSize="xs" placement="top" hasArrow maxW="280px" shouldWrapChildren>
+            <Box as="span" color={iconColor} cursor="help" fontSize="xs">&#9432;</Box>
+          </Tooltip>
+        )}
+      </HStack>
       {children}
     </Box>
+  );
+}
+
+function DonutCenterLabel({ text, color }: { text: string; color: string }) {
+  return (
+    <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central" fill={color} fontSize="13" fontWeight="600">
+      {text}
+    </text>
   );
 }
 
@@ -256,7 +300,11 @@ export default function Charts(props: ChartsProps) {
     downPayment,
     appreciationRate,
     totalPrice,
+    currency,
   } = props;
+
+  const formatCurrencyShort = useMemo(() => makeFormatCurrencyShort(CURRENCY_SYMBOL[currency]), [currency]);
+  const formatCurrencyFull = useMemo(() => makeFormatCurrencyFull(currency), [currency]);
 
   const bgCard = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("gray.200", "gray.600");
@@ -359,7 +407,7 @@ export default function Charts(props: ChartsProps) {
         {/* 1. Investment Breakdown */}
         {investmentData.length > 0 && (
           <GridItem>
-            <ChartCard title="Investment Breakdown" {...cardProps}>
+            <ChartCard title="Investment Breakdown" info="How your total investment is split between purchase price, closing costs, and renovation." {...cardProps}>
               <ResponsiveContainer width="100%" height={230}>
                 <PieChart>
                   <Pie data={investmentData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
@@ -369,6 +417,7 @@ export default function Charts(props: ChartsProps) {
                   </Pie>
                   <RechartsTooltip formatter={(value) => formatCurrencyFull(Number(value))} contentStyle={tooltipStyle} />
                   <Legend wrapperStyle={{ fontSize: "12px", color: textColor }} />
+                  <DonutCenterLabel text={formatCurrencyShort(investmentData.reduce((s, d) => s + d.value, 0))} color={textColor} />
                 </PieChart>
               </ResponsiveContainer>
             </ChartCard>
@@ -378,7 +427,7 @@ export default function Charts(props: ChartsProps) {
         {/* 2. Monthly Expense Breakdown */}
         {expenseData.length > 0 && (
           <GridItem>
-            <ChartCard title="Monthly Expense Breakdown" {...cardProps}>
+            <ChartCard title="Monthly Expense Breakdown" info="Where your money goes each month: mortgage, charges, property tax, and vacancy loss." {...cardProps}>
               <ResponsiveContainer width="100%" height={230}>
                 <PieChart>
                   <Pie data={expenseData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
@@ -388,6 +437,7 @@ export default function Charts(props: ChartsProps) {
                   </Pie>
                   <RechartsTooltip formatter={(value) => `${formatCurrencyFull(Number(value))}/mo`} contentStyle={tooltipStyle} />
                   <Legend wrapperStyle={{ fontSize: "12px", color: textColor }} />
+                  <DonutCenterLabel text={`${formatCurrencyShort(expenseData.reduce((s, d) => s + d.value, 0))}/mo`} color={textColor} />
                 </PieChart>
               </ResponsiveContainer>
             </ChartCard>
@@ -396,7 +446,7 @@ export default function Charts(props: ChartsProps) {
 
         {/* 3. ROI & Yield Metrics */}
         <GridItem>
-          <ChartCard title="ROI & Yield Metrics (%)" {...cardProps}>
+          <ChartCard title="ROI & Yield Metrics (%)" info="Gross yield (before expenses), net yield (after expenses), and cash-on-cash return (annual cashflow / down payment). Negative values mean a loss." {...cardProps}>
             <ResponsiveContainer width="100%" height={230}>
               <BarChart data={yieldData} layout="vertical" margin={{ left: 10, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -417,7 +467,7 @@ export default function Charts(props: ChartsProps) {
         {/* 4. Rent Sensitivity */}
         {rentSensitivityData.length > 0 && (
           <GridItem>
-            <ChartCard title="Rent Sensitivity Analysis" {...cardProps}>
+            <ChartCard title="Rent Sensitivity Analysis" info="How monthly cashflow and net yield change if rent varies from -20% to +20%. The vertical dashed line marks your current rent. Useful for assessing risk." {...cardProps}>
               <ResponsiveContainer width="100%" height={230}>
                 <LineChart data={rentSensitivityData} margin={{ left: 5, right: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -446,7 +496,7 @@ export default function Charts(props: ChartsProps) {
         {/* 5. Annual Principal vs Interest */}
         {annualBreakdownData.length > 0 && (
           <GridItem>
-            <ChartCard title="Annual Principal vs Interest" {...cardProps}>
+            <ChartCard title="Annual Principal vs Interest" info="For each year, how much of your mortgage payments goes to principal (green) vs interest (red). Over time, the principal share grows as the interest share shrinks." {...cardProps}>
               <ResponsiveContainer width="100%" height={230}>
                 <BarChart data={annualBreakdownData} margin={{ left: 5, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -465,7 +515,7 @@ export default function Charts(props: ChartsProps) {
         {/* 7. Amortization Schedule */}
         {amortizationData.length > 0 && (
           <GridItem>
-            <ChartCard title="Amortization Schedule" {...cardProps}>
+            <ChartCard title="Amortization Schedule" info="Remaining loan balance (blue, decreasing), cumulative interest paid (red, increasing), and cumulative principal repaid (green, increasing) over the loan term." {...cardProps}>
               <ResponsiveContainer width="100%" height={230}>
                 <AreaChart data={amortizationData} margin={{ left: 5, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -485,7 +535,7 @@ export default function Charts(props: ChartsProps) {
         {/* 8. Equity Build-Up */}
         {equityData.length > 0 && (
           <GridItem>
-            <ChartCard title={appreciationRate === 0 ? "Equity Build-Up" : `Equity Build-Up (+${appreciationRate}%/yr)`} {...cardProps}>
+            <ChartCard title={appreciationRate === 0 ? "Equity Build-Up" : `Equity Build-Up (+${appreciationRate}%/yr)`} info="Total equity = property value minus remaining loan. Blue = equity from mortgage payments. Green = equity from property appreciation. Appreciation applies to property value only, not rent." {...cardProps}>
               <ResponsiveContainer width="100%" height={230}>
                 <AreaChart data={equityData} margin={{ left: 5, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -504,7 +554,7 @@ export default function Charts(props: ChartsProps) {
         {/* 9. Cumulative Cashflow Projection */}
         {cumulativeCashflowData.length > 0 && (
           <GridItem>
-            <ChartCard title="Cumulative Cashflow Projection" {...cardProps}>
+            <ChartCard title="Cumulative Cashflow Projection" info="Starts at negative down payment, then adds annual cashflow each year. The dashed line marks break-even: when cumulative cashflow crosses zero, you've recovered your initial cash investment." {...cardProps}>
               <ResponsiveContainer width="100%" height={230}>
                 <LineChart data={cumulativeCashflowData} margin={{ left: 5, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />

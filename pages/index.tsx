@@ -116,12 +116,30 @@ type State = {
   [key in Key]: string | number;
 };
 
-const formatCurrency = (value: string): string =>
-  Number(value).toLocaleString("en-US", {
+type Currency = "EUR" | "USD" | "GBP" | "CHF" | "CAD";
+
+const CURRENCIES: { code: Currency; label: string; symbol: string }[] = [
+  { code: "EUR", label: "EUR (€)", symbol: "€" },
+  { code: "USD", label: "USD ($)", symbol: "$" },
+  { code: "GBP", label: "GBP (£)", symbol: "£" },
+  { code: "CHF", label: "CHF", symbol: "CHF" },
+  { code: "CAD", label: "CAD (C$)", symbol: "C$" },
+];
+
+const CURRENCY_LOCALE: Record<Currency, string> = {
+  EUR: "fr-FR",
+  USD: "en-US",
+  GBP: "en-GB",
+  CHF: "de-CH",
+  CAD: "en-CA",
+};
+
+const makeFormatCurrency = (currency: Currency) => (value: string): string =>
+  Number(value).toLocaleString(CURRENCY_LOCALE[currency], {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
     style: "currency",
-    currency: "USD",
+    currency,
   });
 
 const formatPercent = (value: string): string =>
@@ -147,7 +165,9 @@ const defaultState: State = {
 const Home: NextPage = () => {
   const router = useRouter();
   const [state, setState] = useState<State>(defaultState);
+  const [currency, setCurrency] = useState<Currency>("EUR");
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const formatCurrency = useMemo(() => makeFormatCurrency(currency), [currency]);
   const { colorMode, setColorMode } = useColorMode();
   const basePath = router.basePath || "";
 
@@ -178,6 +198,10 @@ const Home: NextPage = () => {
   useEffect(() => {
     if (Object.keys(router.query).length > 0) {
       setState({ ...defaultState, ...(router.query as unknown as State) });
+      const urlCurrency = router.query.currency as string | undefined;
+      if (urlCurrency && CURRENCIES.some((c) => c.code === urlCurrency)) {
+        setCurrency(urlCurrency as Currency);
+      }
     }
   }, [router.query]);
 
@@ -186,7 +210,7 @@ const Home: NextPage = () => {
     if (!router.isReady) return;
     if (Object.keys(router.query).length === 0) {
       void router.replace(
-        { query: defaultState as unknown as Record<string, string> },
+        { query: { ...defaultState, currency: "EUR" } as unknown as Record<string, string> },
         undefined,
         { shallow: true }
       );
@@ -198,6 +222,12 @@ const Home: NextPage = () => {
     const newState = { ...state, [key]: value };
     setState(newState);
     const query = { ...router.query, [key]: value };
+    void router.replace({ query }, undefined, { shallow: true });
+  };
+
+  const onChangeCurrency = (code: Currency) => {
+    setCurrency(code);
+    const query = { ...router.query, currency: code };
     void router.replace({ query }, undefined, { shallow: true });
   };
 
@@ -297,8 +327,9 @@ const Home: NextPage = () => {
 
   const onReset = () => {
     setState(defaultState);
+    setCurrency("EUR");
     void router.replace(
-      { query: defaultState as unknown as Record<string, string> },
+      { query: { ...defaultState, currency: "EUR" } as unknown as Record<string, string> },
       undefined,
       { shallow: true }
     );
@@ -472,6 +503,18 @@ const Home: NextPage = () => {
           Real Estate ROI Calculator
         </Text>
         <HStack spacing={1}>
+          <Menu>
+            <MenuButton as={Button} variant="ghost" size="sm" fontWeight="normal">
+              {CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency}
+            </MenuButton>
+            <MenuList>
+              {CURRENCIES.map((c) => (
+                <MenuItem key={c.code} onClick={() => onChangeCurrency(c.code)} fontWeight={c.code === currency ? "bold" : "normal"}>
+                  {c.label}
+                </MenuItem>
+              ))}
+            </MenuList>
+          </Menu>
           <IconButton
             aria-label="Show formulas"
             icon={<InfoOutlineIcon />}
@@ -722,6 +765,7 @@ const Home: NextPage = () => {
         downPayment={Number(downPayment)}
         appreciationRate={Number(state.appreciationRate)}
         totalPrice={Number(totalPrice)}
+        currency={currency}
       />
     </Box>
   );
