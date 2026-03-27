@@ -9,6 +9,7 @@ const Charts = dynamic(() => import("../components/Charts"), { ssr: false });
 import {
   Box,
   Button,
+  Code,
   FormControl,
   FormLabel,
   Grid,
@@ -20,6 +21,12 @@ import {
   MenuButton,
   MenuItem,
   MenuList,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalHeader,
+  ModalOverlay,
   Stat,
   StatHelpText,
   StatLabel,
@@ -28,6 +35,7 @@ import {
   Tooltip,
   useColorMode,
   useColorModeValue,
+  useDisclosure,
   VStack,
 } from "@chakra-ui/react";
 import { InfoOutlineIcon, MoonIcon, SunIcon } from "@chakra-ui/icons";
@@ -44,6 +52,8 @@ import {
   getCashOnCash,
   getBreakEvenRent,
   getLTV,
+  getDSCR,
+  getGRM,
 } from "../utils";
 
 type Key =
@@ -56,7 +66,8 @@ type Key =
   | "rent"
   | "propertyTax"
   | "monthlyCosts"
-  | "vacancyRate";
+  | "vacancyRate"
+  | "appreciationRate";
 
 type Field = {
   key: Key;
@@ -79,6 +90,7 @@ const sections: Section[] = [
       { key: "housingPrice", name: "Purchase price", step: 10000, placeholder: "e.g. 150,000", min: 0 },
       { key: "notaryFees", name: "Closing costs (notary, agency...)", step: 1000, placeholder: "e.g. 12,000", min: 0 },
       { key: "houseWorks", name: "Renovation budget", step: 1000, placeholder: "0", min: 0 },
+      { key: "appreciationRate", name: "Annual appreciation rate (%)", step: 0.5, placeholder: "e.g. 2", min: -10, max: 20 },
     ],
   },
   {
@@ -129,11 +141,13 @@ const defaultState: State = {
   propertyTax: 1000,
   monthlyCosts: 150,
   vacancyRate: 5,
+  appreciationRate: 2,
 };
 
 const Home: NextPage = () => {
   const router = useRouter();
   const [state, setState] = useState<State>(defaultState);
+  const { isOpen, onOpen, onClose } = useDisclosure();
   const { colorMode, setColorMode } = useColorMode();
   const basePath = router.basePath || "";
 
@@ -271,6 +285,16 @@ const Home: NextPage = () => {
     [state.bankLoan, state.housingPrice]
   );
 
+  const dscr = useMemo(
+    () => getDSCR(netMonthlyIncome, monthlyMortgagePayment),
+    [netMonthlyIncome, monthlyMortgagePayment]
+  );
+
+  const grm = useMemo(
+    () => getGRM(state.housingPrice, Number(state.rent) * 12),
+    [state.housingPrice, state.rent]
+  );
+
   const onReset = () => {
     setState(defaultState);
     void router.replace(
@@ -343,6 +367,10 @@ const Home: NextPage = () => {
       ["Gross yield", stripPercent(grossYield) / 100, "Format: decimal"],
       ["Net yield", stripPercent(netYield) / 100, "Format: decimal"],
       ["Total interest paid", stripCurrency(totalMortgageInterest), ""],
+      ["Cash-on-cash return", stripPercent(cashOnCash) / 100, "Format: decimal"],
+      ["DSCR", Number(dscr), "Debt Service Coverage Ratio"],
+      ["GRM", Number(grm), "Gross Rent Multiplier"],
+      ["Appreciation rate", `${Number(state.appreciationRate)} %`, "Annual"],
     ];
     const resultsSheet = XLSX.utils.aoa_to_sheet(resultsData);
     XLSX.utils.book_append_sheet(workbook, resultsSheet, "Results");
@@ -443,27 +471,38 @@ const Home: NextPage = () => {
         >
           Real Estate ROI Calculator
         </Text>
-        <Menu>
-          <MenuButton
-            as={IconButton}
-            aria-label="Theme options"
-            icon={colorMode === "light" ? <SunIcon /> : <MoonIcon />}
+        <HStack spacing={1}>
+          <IconButton
+            aria-label="Show formulas"
+            icon={<InfoOutlineIcon />}
             variant="ghost"
             size="md"
+            onClick={onOpen}
           />
-          <MenuList>
-            <MenuItem onClick={() => setColorMode("light")}>
-              <SunIcon boxSize={4} mr={3} /> Light
-            </MenuItem>
-            <MenuItem onClick={() => setColorMode("dark")}>
-              <MoonIcon boxSize={4} mr={3} /> Dark
-            </MenuItem>
-            <MenuItem onClick={() => setColorMode("system")}>
-              🖥️ System
-            </MenuItem>
-          </MenuList>
-        </Menu>
+          <Menu>
+            <MenuButton
+              as={IconButton}
+              aria-label="Theme options"
+              icon={colorMode === "light" ? <SunIcon /> : <MoonIcon />}
+              variant="ghost"
+              size="md"
+            />
+            <MenuList>
+              <MenuItem onClick={() => setColorMode("light")}>
+                <SunIcon boxSize={4} mr={3} /> Light
+              </MenuItem>
+              <MenuItem onClick={() => setColorMode("dark")}>
+                <MoonIcon boxSize={4} mr={3} /> Dark
+              </MenuItem>
+              <MenuItem onClick={() => setColorMode("system")}>
+                🖥️ System
+              </MenuItem>
+            </MenuList>
+          </Menu>
+        </HStack>
       </HStack>
+
+      <FormulasModal isOpen={isOpen} onClose={onClose} />
 
       <Grid
         templateColumns={{ base: "1fr", md: "1fr 1fr", lg: "350px 1fr" }}
@@ -594,6 +633,18 @@ const Home: NextPage = () => {
                   color={Number(cashOnCash) >= 0 ? textCashflowPositive : textCashflowNegative}
                   tooltip="(Annual cashflow / Down payment) × 100. The actual return on the cash you invested. Target: >8% excellent, 4-8% good."
                 />
+                <FlexRow
+                  label="DSCR"
+                  value={dscr}
+                  color={Number(dscr) >= 1.25 ? textRendementBon : Number(dscr) >= 1 ? textInterest : textCashflowNegative}
+                  tooltip="Debt Service Coverage Ratio = Net income / Mortgage payment. Banks require ≥ 1.25. Above 1.0 means the property covers its debt."
+                />
+                <FlexRow
+                  label="GRM"
+                  value={grm}
+                  color={Number(grm) <= 15 ? textRendementBon : Number(grm) <= 20 ? textRendementFaible : textCashflowNegative}
+                  tooltip="Gross Rent Multiplier = Purchase price / Annual gross rent. Lower is better. < 15 = good deal, 15-20 = average, > 20 = expensive."
+                />
               </VStack>
             </Box>
           </VStack>
@@ -664,6 +715,14 @@ const Home: NextPage = () => {
         bankRate={Number(state.bankRate)}
         bankLoanPeriod={Number(state.bankLoanPeriod)}
         monthlyMortgage={Number(monthlyMortgagePayment)}
+        monthlyRent={Number(state.rent)}
+        monthlyCosts={Number(state.monthlyCosts)}
+        annualPropertyTax={Number(state.propertyTax)}
+        vacancyRate={Number(state.vacancyRate)}
+        cashflow={Number(cashflow)}
+        downPayment={Number(downPayment)}
+        appreciationRate={Number(state.appreciationRate)}
+        totalPrice={Number(totalPrice)}
       />
     </Box>
   );
@@ -710,6 +769,133 @@ const FlexRow: React.FC<{
         {value}
       </Text>
     </Box>
+  );
+};
+
+const formulas = [
+  {
+    title: "Total Investment",
+    formula: "Total investment = Purchase price + Closing costs + Renovation budget",
+  },
+  {
+    title: "Down Payment",
+    formula: "Down payment = Total investment - Loan amount",
+    note: "The cash you put in upfront.",
+  },
+  {
+    title: "Loan-to-Value (LTV)",
+    formula: "LTV = (Loan amount / Purchase price) x 100",
+    note: "Banks typically require LTV <= 80%.",
+  },
+  {
+    title: "Monthly Mortgage Payment",
+    formula: "M = P x [t(1+t)^n] / [(1+t)^n - 1]",
+    note: "P = loan amount, t = monthly rate (annual rate / 12 / 100), n = total months. If rate = 0%, then M = P / n.",
+  },
+  {
+    title: "Total Mortgage Interest",
+    formula: "Total interest = (Monthly payment x Total months) - Loan amount",
+  },
+  {
+    title: "Total Mortgage Cost",
+    formula: "Total repaid = Loan amount + Total interest",
+  },
+  {
+    title: "Total Operation Cost",
+    formula: "Total operation cost = Total investment + Total interest paid",
+    note: "The real total spent over the full loan duration.",
+  },
+  {
+    title: "Net Monthly Income",
+    formula: "Effective rent = Monthly rent x (1 - Vacancy rate / 100)\nNet income = Effective rent - Monthly costs - Property tax / 12",
+  },
+  {
+    title: "Monthly Cashflow",
+    formula: "Cashflow = Net monthly income - Monthly mortgage payment",
+    note: "Positive = the property pays for itself.",
+  },
+  {
+    title: "Break-Even Rent",
+    formula: "Break-even = (Monthly costs + Property tax / 12 + Mortgage) / (1 - Vacancy rate / 100)",
+    note: "Minimum monthly rent to reach zero cashflow.",
+  },
+  {
+    title: "Gross Yield",
+    formula: "Gross yield = (Monthly rent x 12 / Total investment) x 100",
+    note: "Does not account for expenses.",
+  },
+  {
+    title: "Net Yield",
+    formula: "Net yield = (Net monthly income x 12 / Total investment) x 100",
+    note: "Target: > 5% excellent, 3-5% good, < 3% low.",
+  },
+  {
+    title: "Cash-on-Cash Return",
+    formula: "Cash-on-cash = (Monthly cashflow x 12 / Down payment) x 100",
+    note: "Target: > 8% excellent, 4-8% good.",
+  },
+  {
+    title: "DSCR (Debt Service Coverage Ratio)",
+    formula: "DSCR = Net monthly income / Monthly mortgage payment",
+    note: "The ratio banks use. >= 1.25 = good, >= 1.0 = covers debt, < 1.0 = deficit.",
+  },
+  {
+    title: "GRM (Gross Rent Multiplier)",
+    formula: "GRM = Purchase price / (Monthly rent x 12)",
+    note: "Lower is better. < 15 = good deal, 15-20 = average, > 20 = expensive.",
+  },
+  {
+    title: "Equity Build-Up",
+    formula: "Equity (payments) = Property base value - Remaining balance\nEquity (appreciation) = Base value x (1 + Rate)^Y - Base value\nTotal equity = Equity (payments) + Equity (appreciation)",
+    note: "Property base value = Purchase price + Renovation budget.",
+  },
+  {
+    title: "Amortization (per month)",
+    formula: "Interest = Remaining balance x Monthly rate\nPrincipal = Monthly payment - Interest\nNew balance = Remaining balance - Principal",
+  },
+];
+
+const FormulasModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
+  isOpen,
+  onClose,
+}) => {
+  const codeBg = useColorModeValue("gray.50", "gray.700");
+  const noteColor = useColorModeValue("gray.500", "gray.400");
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} size="xl" scrollBehavior="inside">
+      <ModalOverlay />
+      <ModalContent>
+        <ModalHeader fontSize="lg">Formulas</ModalHeader>
+        <ModalCloseButton />
+        <ModalBody pb={6}>
+          <VStack spacing={4} align="stretch">
+            {formulas.map((f) => (
+              <Box key={f.title}>
+                <Text fontWeight="semibold" fontSize="sm" mb={1}>
+                  {f.title}
+                </Text>
+                <Code
+                  display="block"
+                  whiteSpace="pre-wrap"
+                  p={3}
+                  borderRadius="md"
+                  bg={codeBg}
+                  fontSize="xs"
+                >
+                  {f.formula}
+                </Code>
+                {f.note && (
+                  <Text fontSize="xs" color={noteColor} mt={1}>
+                    {f.note}
+                  </Text>
+                )}
+              </Box>
+            ))}
+          </VStack>
+        </ModalBody>
+      </ModalContent>
+    </Modal>
   );
 };
 

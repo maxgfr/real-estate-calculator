@@ -174,3 +174,25 @@ export const getLTV = (
   const ltv = (Number(loanAmount) / Number(purchasePrice)) * 100;
   return isNaN(ltv) || !isFinite(ltv) ? '0' : ltv.toFixed(decimal);
 };
+
+export const getDSCR = (
+  netMonthlyIncome: string | number,
+  monthlyMortgage: string | number,
+  decimal = 2
+): string => {
+  const mortgage = Number(monthlyMortgage);
+  if (mortgage === 0) return '0';
+  const dscr = Number(netMonthlyIncome) / mortgage;
+  return isNaN(dscr) || !isFinite(dscr) ? '0' : dscr.toFixed(decimal);
+};
+
+export const getGRM = (
+  purchasePrice: string | number,
+  annualGrossRent: string | number,
+  decimal = 1
+): string => {
+  const rent = Number(annualGrossRent);
+  if (rent === 0) return '0';
+  const grm = Number(purchasePrice) / rent;
+  return isNaN(grm) || !isFinite(grm) ? '0' : grm.toFixed(decimal);
+};

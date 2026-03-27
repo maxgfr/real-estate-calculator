@@ -11,6 +11,8 @@ import {
   getTotalOperationCost,
   getCashOnCash,
   getBreakEvenRent,
+  getDSCR,
+  getGRM,
 } from './index';
 
 describe('getMonthlyMortgagePayment', () => {
@@ -287,6 +289,49 @@ describe('getLTV', () => {
 
   it('should handle NaN inputs', () => {
     expect(getLTV('invalid', '200000')).toBe('0');
+  });
+});
+
+describe('getDSCR', () => {
+  it('should calculate DSCR correctly', () => {
+    // net income = 950, mortgage = 870 → 950/870 = 1.09
+    const result = getDSCR('950', '870');
+    expect(Number(result)).toBeCloseTo(1.09, 1);
+  });
+
+  it('should return 0 when mortgage is zero', () => {
+    expect(getDSCR('950', '0')).toBe('0');
+  });
+
+  it('should handle negative net income', () => {
+    const result = getDSCR('-200', '870');
+    expect(Number(result)).toBeLessThan(0);
+  });
+
+  it('should handle NaN inputs', () => {
+    expect(getDSCR('invalid', '870')).toBe('0');
+  });
+});
+
+describe('getGRM', () => {
+  it('should calculate GRM correctly', () => {
+    // 150000 / 9000 = 16.7
+    const result = getGRM('150000', '9000');
+    expect(Number(result)).toBeCloseTo(16.7, 0);
+  });
+
+  it('should return 0 when rent is zero', () => {
+    expect(getGRM('150000', '0')).toBe('0');
+  });
+
+  it('should handle low GRM (good deal)', () => {
+    // 100000 / 12000 = 8.3
+    const result = getGRM('100000', '12000');
+    expect(Number(result)).toBeCloseTo(8.3, 0);
+  });
+
+  it('should handle NaN inputs', () => {
+    expect(getGRM('invalid', '9000')).toBe('0');
   });
 });
 

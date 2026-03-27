@@ -13,6 +13,9 @@ import {
   CartesianGrid,
   AreaChart,
   Area,
+  LineChart,
+  Line,
+  ReferenceLine,
   Legend,
 } from "recharts";
 
@@ -28,9 +31,20 @@ type ChartsProps = {
   bankRate: number;
   bankLoanPeriod: number;
   monthlyMortgage: number;
+  monthlyRent: number;
+  monthlyCosts: number;
+  annualPropertyTax: number;
+  vacancyRate: number;
+  cashflow: number;
+  downPayment: number;
+  appreciationRate: number;
+  totalPrice: number;
 };
 
 const PIE_COLORS = ["#4299E1", "#ED8936", "#48BB78", "#9F7AEA"];
+const EXPENSE_COLORS = ["#E53E3E", "#ED8936", "#9F7AEA", "#718096"];
+
+// --- Computation helpers ---
 
 function computeAmortization(
   loanAmount: number,
@@ -38,12 +52,9 @@ function computeAmortization(
   years: number,
   monthlyPayment: number
 ) {
-  const data: {
-    year: number;
-    balance: number;
-    interest: number;
-    principal: number;
-  }[] = [];
+  const data: { year: number; balance: number; interest: number; principal: number }[] = [];
+  if (loanAmount <= 0 || years <= 0 || monthlyPayment <= 0) return data;
+
   let balance = loanAmount;
   const monthlyRate = annualRate / 100 / 12;
   let cumInterest = 0;
@@ -67,9 +78,124 @@ function computeAmortization(
       principal: Math.round(cumPrincipal),
     });
   }
-
   return data;
 }
+
+function computeAnnualPrincipalVsInterest(
+  loanAmount: number,
+  annualRate: number,
+  years: number,
+  monthlyPayment: number
+) {
+  const data: { year: number; principal: number; interest: number }[] = [];
+  if (loanAmount <= 0 || years <= 0 || monthlyPayment <= 0) return data;
+
+  let balance = loanAmount;
+  const monthlyRate = annualRate / 100 / 12;
+
+  for (let y = 1; y <= years; y++) {
+    let yearPrincipal = 0;
+    let yearInterest = 0;
+    for (let m = 0; m < 12; m++) {
+      if (balance <= 0) break;
+      const interest = monthlyRate === 0 ? 0 : balance * monthlyRate;
+      const principal = Math.min(monthlyPayment - interest, balance);
+      balance = Math.max(0, balance - principal);
+      yearPrincipal += principal;
+      yearInterest += interest;
+    }
+    data.push({
+      year: y,
+      principal: Math.round(yearPrincipal),
+      interest: Math.round(yearInterest),
+    });
+  }
+  return data;
+}
+
+function computeEquityBuildUp(
+  loanAmount: number,
+  annualRate: number,
+  years: number,
+  monthlyPayment: number,
+  propertyBaseValue: number,
+  appreciationRate: number
+) {
+  const data: { year: number; paidEquity: number; appreciation: number }[] = [];
+  if (years <= 0 || propertyBaseValue <= 0) return data;
+
+  let balance = loanAmount;
+  const monthlyRate = annualRate / 100 / 12;
+
+  for (let y = 0; y <= years; y++) {
+    const propertyValue = propertyBaseValue * Math.pow(1 + appreciationRate / 100, y);
+    const paidEquity = propertyBaseValue - balance;
+    const appreciation = propertyValue - propertyBaseValue;
+
+    data.push({
+      year: y,
+      paidEquity: Math.round(Math.max(0, paidEquity)),
+      appreciation: Math.round(Math.max(0, appreciation)),
+    });
+
+    // Process 12 months
+    for (let m = 0; m < 12; m++) {
+      if (balance <= 0) break;
+      const interest = monthlyRate === 0 ? 0 : balance * monthlyRate;
+      const principal = Math.min(monthlyPayment - interest, balance);
+      balance = Math.max(0, balance - principal);
+    }
+  }
+  return data;
+}
+
+function computeCumulativeCashflow(
+  downPayment: number,
+  annualCashflow: number,
+  years: number
+) {
+  const data: { year: number; cumulative: number }[] = [];
+  if (years <= 0) return data;
+
+  const horizon = Math.max(years, 10);
+  let cumulative = -downPayment;
+  data.push({ year: 0, cumulative: Math.round(cumulative) });
+
+  for (let y = 1; y <= horizon; y++) {
+    cumulative += annualCashflow;
+    data.push({ year: y, cumulative: Math.round(cumulative) });
+  }
+  return data;
+}
+
+function computeRentSensitivity(
+  baseRent: number,
+  monthlyCosts: number,
+  annualPropertyTax: number,
+  vacancyRate: number,
+  monthlyMortgage: number,
+  totalPrice: number
+) {
+  const data: { label: string; cashflow: number; netYield: number }[] = [];
+  if (baseRent <= 0 || totalPrice <= 0) return data;
+
+  for (let pct = -20; pct <= 20; pct += 5) {
+    const rent = baseRent * (1 + pct / 100);
+    const effectiveRent = rent * (1 - vacancyRate / 100);
+    const netIncome = effectiveRent - monthlyCosts - annualPropertyTax / 12;
+    const cashflow = netIncome - monthlyMortgage;
+    const netYield = ((netIncome * 12) / totalPrice) * 100;
+
+    data.push({
+      label: pct === 0 ? "0%" : `${pct > 0 ? "+" : ""}${pct}%`,
+      cashflow: Math.round(cashflow),
+      netYield: Number(netYield.toFixed(2)),
+    });
+  }
+  return data;
+}
+
+// --- Formatting helpers ---
 
 const formatCurrencyShort = (value: number): string => {
   if (Math.abs(value) >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
@@ -83,6 +209,8 @@ const formatCurrencyFull = (value: number): string =>
     currency: "USD",
     maximumFractionDigits: 0,
   });
+
+// --- Shared sub-components ---
 
 function ChartCard({
   title,
@@ -107,6 +235,8 @@ function ChartCard({
   );
 }
 
+// --- Main component ---
+
 export default function Charts(props: ChartsProps) {
   const {
     housingPrice,
@@ -120,6 +250,14 @@ export default function Charts(props: ChartsProps) {
     bankRate,
     bankLoanPeriod,
     monthlyMortgage,
+    monthlyRent,
+    monthlyCosts,
+    annualPropertyTax,
+    vacancyRate,
+    cashflow,
+    downPayment,
+    appreciationRate,
+    totalPrice,
   } = props;
 
   const bgCard = useColorModeValue("white", "gray.800");
@@ -137,7 +275,10 @@ export default function Charts(props: ChartsProps) {
     fontSize: "12px",
   };
 
-  // Investment breakdown
+  const cardProps = { bg: bgCard, borderColor, titleColor };
+
+  // --- Memoized data ---
+
   const investmentData = useMemo(
     () =>
       [
@@ -148,17 +289,25 @@ export default function Charts(props: ChartsProps) {
     [housingPrice, notaryFees, houseWorks]
   );
 
-  // Mortgage breakdown
+  const expenseData = useMemo(() => {
+    const vacancyLoss = monthlyRent * (vacancyRate / 100);
+    return [
+      { name: "Mortgage", value: Math.round(monthlyMortgage) },
+      { name: "Charges", value: Math.round(monthlyCosts) },
+      { name: "Property tax", value: Math.round(annualPropertyTax / 12) },
+      ...(vacancyLoss > 0 ? [{ name: "Vacancy loss", value: Math.round(vacancyLoss) }] : []),
+    ].filter((d) => d.value > 0);
+  }, [monthlyMortgage, monthlyCosts, annualPropertyTax, monthlyRent, vacancyRate]);
+
   const mortgageData = useMemo(
     () =>
       [
-        { name: "Principal", value: loanAmount },
-        { name: "Interest", value: totalInterest },
+        { name: "Principal", value: loanAmount, color: "#4299E1" },
+        { name: "Interest", value: totalInterest, color: "#FC8181" },
       ].filter((d) => d.value > 0),
     [loanAmount, totalInterest]
   );
 
-  // Yield comparison
   const yieldData = useMemo(
     () => [
       { name: "Gross yield", value: Number(grossYield.toFixed(2)), fill: "#4299E1" },
@@ -168,10 +317,47 @@ export default function Charts(props: ChartsProps) {
     [grossYield, netYield, cashOnCash]
   );
 
-  // Amortization schedule
   const amortizationData = useMemo(
     () => computeAmortization(loanAmount, bankRate, bankLoanPeriod, monthlyMortgage),
     [loanAmount, bankRate, bankLoanPeriod, monthlyMortgage]
+  );
+
+  const annualBreakdownData = useMemo(
+    () => computeAnnualPrincipalVsInterest(loanAmount, bankRate, bankLoanPeriod, monthlyMortgage),
+    [loanAmount, bankRate, bankLoanPeriod, monthlyMortgage]
+  );
+
+  const propertyBaseValue = housingPrice + houseWorks;
+
+  const equityData = useMemo(
+    () =>
+      computeEquityBuildUp(
+        loanAmount,
+        bankRate,
+        bankLoanPeriod,
+        monthlyMortgage,
+        propertyBaseValue,
+        appreciationRate
+      ),
+    [loanAmount, bankRate, bankLoanPeriod, monthlyMortgage, propertyBaseValue, appreciationRate]
+  );
+
+  const cumulativeCashflowData = useMemo(
+    () => computeCumulativeCashflow(downPayment, cashflow * 12, bankLoanPeriod),
+    [downPayment, cashflow, bankLoanPeriod]
+  );
+
+  const rentSensitivityData = useMemo(
+    () =>
+      computeRentSensitivity(
+        monthlyRent,
+        monthlyCosts,
+        annualPropertyTax,
+        vacancyRate,
+        monthlyMortgage,
+        totalPrice
+      ),
+    [monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, totalPrice]
   );
 
   return (
@@ -180,103 +366,55 @@ export default function Charts(props: ChartsProps) {
         Analytics
       </Text>
       <Grid templateColumns={{ base: "1fr", md: "1fr 1fr" }} gap={4}>
-        {/* Investment Breakdown */}
-        <GridItem>
-          <ChartCard
-            title="Investment Breakdown"
-            bg={bgCard}
-            borderColor={borderColor}
-            titleColor={titleColor}
-          >
-            <ResponsiveContainer width="100%" height={230}>
-              <PieChart>
-                <Pie
-                  data={investmentData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={2}
-                >
-                  {investmentData.map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <RechartsTooltip
-                  formatter={(value) => formatCurrencyFull(Number(value))}
-                  contentStyle={tooltipStyle}
-                />
-                <Legend
-                  wrapperStyle={{ fontSize: "12px", color: textColor }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </ChartCard>
-        </GridItem>
 
-        {/* Mortgage Cost Split */}
-        <GridItem>
-          <ChartCard
-            title="Mortgage Cost Split"
-            bg={bgCard}
-            borderColor={borderColor}
-            titleColor={titleColor}
-          >
-            <ResponsiveContainer width="100%" height={230}>
-              <PieChart>
-                <Pie
-                  data={mortgageData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={2}
-                >
-                  <Cell fill="#4299E1" />
-                  <Cell fill="#FC8181" />
-                </Pie>
-                <RechartsTooltip
-                  formatter={(value) => formatCurrencyFull(Number(value))}
-                  contentStyle={tooltipStyle}
-                />
-                <Legend
-                  wrapperStyle={{ fontSize: "12px", color: textColor }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </ChartCard>
-        </GridItem>
+        {/* 1. Investment Breakdown */}
+        {investmentData.length > 0 && (
+          <GridItem>
+            <ChartCard title="Investment Breakdown" {...cardProps}>
+              <ResponsiveContainer width="100%" height={230}>
+                <PieChart>
+                  <Pie data={investmentData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
+                    {investmentData.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip formatter={(value) => formatCurrencyFull(Number(value))} contentStyle={tooltipStyle} />
+                  <Legend wrapperStyle={{ fontSize: "12px", color: textColor }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </GridItem>
+        )}
 
-        {/* ROI & Yield Metrics */}
+        {/* 2. Monthly Expense Breakdown */}
+        {expenseData.length > 0 && (
+          <GridItem>
+            <ChartCard title="Monthly Expense Breakdown" {...cardProps}>
+              <ResponsiveContainer width="100%" height={230}>
+                <PieChart>
+                  <Pie data={expenseData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
+                    {expenseData.map((_, i) => (
+                      <Cell key={i} fill={EXPENSE_COLORS[i % EXPENSE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip formatter={(value) => `${formatCurrencyFull(Number(value))}/mo`} contentStyle={tooltipStyle} />
+                  <Legend wrapperStyle={{ fontSize: "12px", color: textColor }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </GridItem>
+        )}
+
+        {/* 3. ROI & Yield Metrics */}
         <GridItem>
-          <ChartCard
-            title="ROI & Yield Metrics (%)"
-            bg={bgCard}
-            borderColor={borderColor}
-            titleColor={titleColor}
-          >
+          <ChartCard title="ROI & Yield Metrics (%)" {...cardProps}>
             <ResponsiveContainer width="100%" height={230}>
               <BarChart data={yieldData} layout="vertical" margin={{ left: 10, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis
-                  type="number"
-                  tick={{ fill: textColor, fontSize: 12 }}
-                  tickFormatter={(v) => `${v}%`}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  tick={{ fill: textColor, fontSize: 12 }}
-                  width={95}
-                />
-                <RechartsTooltip
-                  formatter={(value) => `${Number(value).toFixed(2)}%`}
-                  contentStyle={tooltipStyle}
-                />
+                <XAxis type="number" tick={{ fill: textColor, fontSize: 12 }} tickFormatter={(v) => `${v}%`} />
+                <YAxis type="category" dataKey="name" tick={{ fill: textColor, fontSize: 12 }} width={95} />
+                <RechartsTooltip formatter={(value) => `${Number(value).toFixed(2)}%`} contentStyle={tooltipStyle} />
+                <ReferenceLine x={0} stroke={textColor} strokeDasharray="3 3" />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                   {yieldData.map((entry, i) => (
                     <Cell key={i} fill={entry.fill} />
@@ -287,68 +425,130 @@ export default function Charts(props: ChartsProps) {
           </ChartCard>
         </GridItem>
 
-        {/* Amortization Schedule */}
-        <GridItem>
-          <ChartCard
-            title="Amortization Schedule"
-            bg={bgCard}
-            borderColor={borderColor}
-            titleColor={titleColor}
-          >
-            <ResponsiveContainer width="100%" height={230}>
-              <AreaChart data={amortizationData} margin={{ left: 5, right: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis
-                  dataKey="year"
-                  tick={{ fill: textColor, fontSize: 12 }}
-                  label={{
-                    value: "Year",
-                    position: "insideBottom",
-                    offset: -5,
-                    fill: textColor,
-                    fontSize: 12,
-                  }}
-                />
-                <YAxis
-                  tick={{ fill: textColor, fontSize: 12 }}
-                  tickFormatter={(v) => formatCurrencyShort(Number(v))}
-                />
-                <RechartsTooltip
-                  formatter={(value) => formatCurrencyFull(Number(value))}
-                  contentStyle={tooltipStyle}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="balance"
-                  name="Remaining balance"
-                  stroke="#4299E1"
-                  fill="#4299E1"
-                  fillOpacity={0.15}
-                  strokeWidth={2}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="interest"
-                  name="Cumulative interest"
-                  stroke="#FC8181"
-                  fill="#FC8181"
-                  fillOpacity={0.15}
-                  strokeWidth={2}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="principal"
-                  name="Cumulative principal"
-                  stroke="#48BB78"
-                  fill="#48BB78"
-                  fillOpacity={0.15}
-                  strokeWidth={2}
-                />
-                <Legend wrapperStyle={{ fontSize: "11px", color: textColor }} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </ChartCard>
-        </GridItem>
+        {/* 4. Rent Sensitivity */}
+        {rentSensitivityData.length > 0 && (
+          <GridItem>
+            <ChartCard title="Rent Sensitivity Analysis" {...cardProps}>
+              <ResponsiveContainer width="100%" height={230}>
+                <LineChart data={rentSensitivityData} margin={{ left: 5, right: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                  <XAxis dataKey="label" tick={{ fill: textColor, fontSize: 11 }} />
+                  <YAxis yAxisId="cashflow" tick={{ fill: textColor, fontSize: 11 }} tickFormatter={(v) => formatCurrencyShort(Number(v))} />
+                  <YAxis yAxisId="yield" orientation="right" tick={{ fill: textColor, fontSize: 11 }} tickFormatter={(v) => `${v}%`} />
+                  <RechartsTooltip
+                    formatter={(value, name) =>
+                      name === "Monthly cashflow"
+                        ? formatCurrencyFull(Number(value))
+                        : `${Number(value).toFixed(2)}%`
+                    }
+                    contentStyle={tooltipStyle}
+                  />
+                  <ReferenceLine yAxisId="cashflow" y={0} stroke={textColor} strokeDasharray="3 3" />
+                  <ReferenceLine x="0%" stroke={textColor} strokeDasharray="3 3" strokeWidth={1} />
+                  <Line yAxisId="cashflow" type="monotone" dataKey="cashflow" name="Monthly cashflow" stroke="#48BB78" strokeWidth={2} dot={{ r: 3, fill: "#48BB78" }} />
+                  <Line yAxisId="yield" type="monotone" dataKey="netYield" name="Net yield" stroke="#4299E1" strokeWidth={2} dot={{ r: 3, fill: "#4299E1" }} />
+                  <Legend wrapperStyle={{ fontSize: "11px", color: textColor }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </GridItem>
+        )}
+
+        {/* 5. Mortgage Cost Split */}
+        {mortgageData.length > 0 && (
+          <GridItem>
+            <ChartCard title="Mortgage Cost Split" {...cardProps}>
+              <ResponsiveContainer width="100%" height={230}>
+                <PieChart>
+                  <Pie data={mortgageData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
+                    {mortgageData.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip formatter={(value) => formatCurrencyFull(Number(value))} contentStyle={tooltipStyle} />
+                  <Legend wrapperStyle={{ fontSize: "12px", color: textColor }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </GridItem>
+        )}
+
+        {/* 6. Annual Principal vs Interest */}
+        {annualBreakdownData.length > 0 && (
+          <GridItem>
+            <ChartCard title="Annual Principal vs Interest" {...cardProps}>
+              <ResponsiveContainer width="100%" height={230}>
+                <BarChart data={annualBreakdownData} margin={{ left: 5, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                  <XAxis dataKey="year" tick={{ fill: textColor, fontSize: 11 }} interval={bankLoanPeriod > 20 ? 4 : bankLoanPeriod > 10 ? 1 : 0} />
+                  <YAxis tick={{ fill: textColor, fontSize: 11 }} tickFormatter={(v) => formatCurrencyShort(Number(v))} />
+                  <RechartsTooltip formatter={(value) => formatCurrencyFull(Number(value))} contentStyle={tooltipStyle} />
+                  <Bar dataKey="principal" name="Principal" stackId="a" fill="#48BB78" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="interest" name="Interest" stackId="a" fill="#FC8181" radius={[4, 4, 0, 0]} />
+                  <Legend wrapperStyle={{ fontSize: "11px", color: textColor }} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </GridItem>
+        )}
+
+        {/* 7. Amortization Schedule */}
+        {amortizationData.length > 0 && (
+          <GridItem>
+            <ChartCard title="Amortization Schedule" {...cardProps}>
+              <ResponsiveContainer width="100%" height={230}>
+                <AreaChart data={amortizationData} margin={{ left: 5, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                  <XAxis dataKey="year" tick={{ fill: textColor, fontSize: 12 }} />
+                  <YAxis tick={{ fill: textColor, fontSize: 12 }} tickFormatter={(v) => formatCurrencyShort(Number(v))} />
+                  <RechartsTooltip formatter={(value) => formatCurrencyFull(Number(value))} contentStyle={tooltipStyle} />
+                  <Area type="monotone" dataKey="balance" name="Remaining balance" stroke="#4299E1" fill="#4299E1" fillOpacity={0.15} strokeWidth={2} />
+                  <Area type="monotone" dataKey="interest" name="Cumulative interest" stroke="#FC8181" fill="#FC8181" fillOpacity={0.15} strokeWidth={2} />
+                  <Area type="monotone" dataKey="principal" name="Cumulative principal" stroke="#48BB78" fill="#48BB78" fillOpacity={0.15} strokeWidth={2} />
+                  <Legend wrapperStyle={{ fontSize: "11px", color: textColor }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </GridItem>
+        )}
+
+        {/* 8. Equity Build-Up */}
+        {equityData.length > 0 && (
+          <GridItem>
+            <ChartCard title={`Equity Build-Up (${appreciationRate}%/yr appreciation)`} {...cardProps}>
+              <ResponsiveContainer width="100%" height={230}>
+                <AreaChart data={equityData} margin={{ left: 5, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                  <XAxis dataKey="year" tick={{ fill: textColor, fontSize: 12 }} />
+                  <YAxis tick={{ fill: textColor, fontSize: 12 }} tickFormatter={(v) => formatCurrencyShort(Number(v))} />
+                  <RechartsTooltip formatter={(value) => formatCurrencyFull(Number(value))} contentStyle={tooltipStyle} />
+                  <Area type="monotone" dataKey="paidEquity" name="Equity (payments)" stackId="1" stroke="#4299E1" fill="#4299E1" fillOpacity={0.3} strokeWidth={2} />
+                  <Area type="monotone" dataKey="appreciation" name="Equity (appreciation)" stackId="1" stroke="#48BB78" fill="#48BB78" fillOpacity={0.3} strokeWidth={2} />
+                  <Legend wrapperStyle={{ fontSize: "11px", color: textColor }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </GridItem>
+        )}
+
+        {/* 9. Cumulative Cashflow Projection */}
+        {cumulativeCashflowData.length > 0 && (
+          <GridItem>
+            <ChartCard title="Cumulative Cashflow Projection" {...cardProps}>
+              <ResponsiveContainer width="100%" height={230}>
+                <LineChart data={cumulativeCashflowData} margin={{ left: 5, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                  <XAxis dataKey="year" tick={{ fill: textColor, fontSize: 12 }} />
+                  <YAxis tick={{ fill: textColor, fontSize: 12 }} tickFormatter={(v) => formatCurrencyShort(Number(v))} />
+                  <RechartsTooltip formatter={(value) => formatCurrencyFull(Number(value))} contentStyle={tooltipStyle} />
+                  <ReferenceLine y={0} stroke={textColor} strokeDasharray="3 3" label={{ value: "Break-even", fill: textColor, fontSize: 11 }} />
+                  <Line type="monotone" dataKey="cumulative" name="Cumulative cashflow" stroke="#48BB78" strokeWidth={2} dot={{ r: 3, fill: "#48BB78" }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </GridItem>
+        )}
+
       </Grid>
     </Box>
   );
