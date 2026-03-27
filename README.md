@@ -12,6 +12,7 @@
 - **Complete cost model** — vacancy rate, monthly costs, property tax, appreciation all factored in
 - **Shareable URLs** — every input is reflected in the URL, bookmark or share any scenario
 - **Excel export** — multi-sheet workbook (Purchase, Mortgage, Rental, Results)
+- **Multi-currency** — EUR, USD, GBP, CHF, CAD with correct locale formatting
 - **Dark/Light theme** — system-aware, mobile responsive
 - **Real-time updates** — results update instantly as you type
 - **Docker ready** — Dockerfile + docker-compose for easy deployment
@@ -155,6 +156,16 @@ New balance       = Remaining balance - Principal portion
 
 Repeated each month over the loan term.
 
+### Cumulative Cashflow Projection
+
+```
+Year 0:  -Down payment
+Year Y:  Previous + (Net income at year Y - Mortgage if Y <= loan period) x 12
+Rent at year Y = Monthly rent x (1 + Rent increase rate / 100)^(Y-1)
+```
+
+After the loan is fully repaid, mortgage drops to zero. If annual rent increase > 0%, cashflow grows each year.
+
 ## Getting Started
 
 ```bash
@@ -187,6 +198,7 @@ The calculator opens with pre-filled example values — just adjust the numbers 
 | Rental | Annual property tax | 1,000 |
 | Rental | Monthly costs (charges, insurance, maintenance) | 150 |
 | Rental | Vacancy rate (%) | 5% |
+| Rental | Annual rent increase (%) | 0% |
 
 ## Summary Metrics
 
@@ -219,7 +231,7 @@ The calculator opens with pre-filled example values — just adjust the numbers 
 | Annual Principal vs Interest | Stacked bar | Per-year breakdown of mortgage payments |
 | Amortization Schedule | Area | Balance, cumulative interest, cumulative principal |
 | Equity Build-Up | Stacked area | Equity from payments + appreciation over time |
-| Cumulative Cashflow | Line | Cumulative cashflow with break-even marker |
+| Cumulative Cashflow | Line | Cumulative cashflow with break-even and loan-end markers |
 
 ## Benchmarks
 
@@ -236,7 +248,7 @@ The calculator opens with pre-filled example values — just adjust the numbers 
 Every field is stored in the URL. Share or bookmark any scenario:
 
 ```
-https://maxgfr.github.io/real-estate-calculator/?housingPrice=150000&notaryFees=12000&houseWorks=0&appreciationRate=0&bankLoan=150000&bankRate=3.5&bankLoanPeriod=20&rent=750&propertyTax=1000&monthlyCosts=150&vacancyRate=5
+https://maxgfr.github.io/real-estate-calculator/?housingPrice=150000&notaryFees=12000&houseWorks=0&appreciationRate=0&bankLoan=150000&bankRate=3.5&bankLoanPeriod=20&rent=750&propertyTax=1000&monthlyCosts=150&vacancyRate=5&rentIncreaseRate=0&currency=EUR
 ```
 
 ## Project Structure
@@ -247,7 +259,7 @@ real-estate-calculator/
 │   ├── index.tsx          # Main calculator (inputs + results)
 │   └── _app.tsx           # Chakra UI theme provider
 ├── components/
-│   └── Charts.tsx         # 9 interactive charts (recharts)
+│   └── Charts.tsx         # 8 interactive charts (recharts)
 ├── utils/
 │   ├── index.ts           # All calculation functions (pure, typed)
 │   └── index.test.ts      # Unit tests (51 tests)

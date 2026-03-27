@@ -175,12 +175,13 @@ function computeCumulativeCashflow(
   vacancyRate: number,
   monthlyMortgage: number,
   rentIncreaseRate: number,
-  years: number
+  loanPeriod: number
 ) {
   const data: { year: number; cumulative: number }[] = [];
-  if (years <= 0) return data;
+  if (loanPeriod <= 0) return data;
 
-  const horizon = Math.max(years, 10);
+  // Show 10 years beyond loan end (capped at 40) to reveal the recovery period
+  const horizon = Math.min(loanPeriod + 10, 40);
   let cumulative = -downPayment;
   data.push({ year: 0, cumulative: Math.round(cumulative) });
 
@@ -188,7 +189,9 @@ function computeCumulativeCashflow(
     const rent = monthlyRent * Math.pow(1 + rentIncreaseRate / 100, y - 1);
     const effectiveRent = rent * (1 - vacancyRate / 100);
     const netIncome = effectiveRent - monthlyCosts - annualPropertyTax / 12;
-    const cashflow = netIncome - monthlyMortgage;
+    // After the loan is paid off, no more mortgage payments
+    const mortgage = y <= loanPeriod ? monthlyMortgage : 0;
+    const cashflow = netIncome - mortgage;
     cumulative += cashflow * 12;
     data.push({ year: y, cumulative: Math.round(cumulative) });
   }
@@ -573,7 +576,7 @@ export default function Charts(props: ChartsProps) {
         {/* 9. Cumulative Cashflow Projection */}
         {cumulativeCashflowData.length > 0 && (
           <GridItem>
-            <ChartCard title="Cumulative Cashflow Projection" info="Starts at negative down payment, then adds annual cashflow each year. If annual rent increase is set, the cashflow grows over time. The dashed line marks break-even." {...cardProps}>
+            <ChartCard title="Cumulative Cashflow Projection" info="Starts at negative down payment, then adds annual cashflow each year. After the loan ends (vertical line), mortgage drops to zero and cashflow improves. The horizontal dashed line marks break-even." {...cardProps}>
               <ResponsiveContainer width="100%" height={230}>
                 <LineChart data={cumulativeCashflowData} margin={{ left: 5, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -581,6 +584,7 @@ export default function Charts(props: ChartsProps) {
                   <YAxis tick={{ fill: textColor, fontSize: 12 }} tickFormatter={(v) => formatCurrencyShort(Number(v))} />
                   <RechartsTooltip formatter={(value) => formatCurrencyFull(Number(value))} contentStyle={tooltipStyle} />
                   <ReferenceLine y={0} stroke={textColor} strokeDasharray="3 3" label={{ value: "Break-even", fill: textColor, fontSize: 11 }} />
+                  <ReferenceLine x={bankLoanPeriod} stroke="#ED8936" strokeDasharray="3 3" label={{ value: "Loan end", fill: "#ED8936", fontSize: 10, position: "top" }} />
                   <Line type="monotone" dataKey="cumulative" name="Cumulative cashflow" stroke="#48BB78" strokeWidth={2} dot={{ r: 3, fill: "#48BB78" }} />
                 </LineChart>
               </ResponsiveContainer>

@@ -404,7 +404,8 @@ const Home: NextPage = () => {
       ["Cash-on-cash return", stripPercent(cashOnCash) / 100, "Format: decimal"],
       ["DSCR", Number(dscr), "Debt Service Coverage Ratio"],
       ["GRM", Number(grm), "Gross Rent Multiplier"],
-      ["Appreciation rate", `${Number(state.appreciationRate)} %`, "Annual"],
+      ["Appreciation rate", `${Number(state.appreciationRate)} %`, "Annual (property value)"],
+      ["Rent increase rate", `${Number(state.rentIncreaseRate)} %`, "Annual"],
     ];
     const resultsSheet = XLSX.utils.aoa_to_sheet(resultsData);
     XLSX.utils.book_append_sheet(workbook, resultsSheet, "Results");
