@@ -36,9 +36,9 @@ type ChartsProps = {
   monthlyCosts: number;
   annualPropertyTax: number;
   vacancyRate: number;
-  cashflow: number;
   downPayment: number;
   appreciationRate: number;
+  rentIncreaseRate: number;
   totalPrice: number;
   currency: Currency;
 };
@@ -169,7 +169,12 @@ function computeEquityBuildUp(
 
 function computeCumulativeCashflow(
   downPayment: number,
-  annualCashflow: number,
+  monthlyRent: number,
+  monthlyCosts: number,
+  annualPropertyTax: number,
+  vacancyRate: number,
+  monthlyMortgage: number,
+  rentIncreaseRate: number,
   years: number
 ) {
   const data: { year: number; cumulative: number }[] = [];
@@ -180,7 +185,11 @@ function computeCumulativeCashflow(
   data.push({ year: 0, cumulative: Math.round(cumulative) });
 
   for (let y = 1; y <= horizon; y++) {
-    cumulative += annualCashflow;
+    const rent = monthlyRent * Math.pow(1 + rentIncreaseRate / 100, y - 1);
+    const effectiveRent = rent * (1 - vacancyRate / 100);
+    const netIncome = effectiveRent - monthlyCosts - annualPropertyTax / 12;
+    const cashflow = netIncome - monthlyMortgage;
+    cumulative += cashflow * 12;
     data.push({ year: y, cumulative: Math.round(cumulative) });
   }
   return data;
@@ -296,9 +305,9 @@ export default function Charts(props: ChartsProps) {
     monthlyCosts,
     annualPropertyTax,
     vacancyRate,
-    cashflow,
     downPayment,
     appreciationRate,
+    rentIncreaseRate,
     totalPrice,
     currency,
   } = props;
@@ -380,8 +389,18 @@ export default function Charts(props: ChartsProps) {
   );
 
   const cumulativeCashflowData = useMemo(
-    () => computeCumulativeCashflow(downPayment, cashflow * 12, bankLoanPeriod),
-    [downPayment, cashflow, bankLoanPeriod]
+    () =>
+      computeCumulativeCashflow(
+        downPayment,
+        monthlyRent,
+        monthlyCosts,
+        annualPropertyTax,
+        vacancyRate,
+        monthlyMortgage,
+        rentIncreaseRate,
+        bankLoanPeriod
+      ),
+    [downPayment, monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, rentIncreaseRate, bankLoanPeriod]
   );
 
   const rentSensitivityData = useMemo(
@@ -417,7 +436,7 @@ export default function Charts(props: ChartsProps) {
                   </Pie>
                   <RechartsTooltip formatter={(value) => formatCurrencyFull(Number(value))} contentStyle={tooltipStyle} />
                   <Legend wrapperStyle={{ fontSize: "12px", color: textColor }} />
-                  <DonutCenterLabel text={formatCurrencyShort(investmentData.reduce((s, d) => s + d.value, 0))} color={textColor} />
+                  <DonutCenterLabel text={formatCurrencyFull(investmentData.reduce((s, d) => s + d.value, 0))} color={textColor} />
                 </PieChart>
               </ResponsiveContainer>
             </ChartCard>
@@ -437,7 +456,7 @@ export default function Charts(props: ChartsProps) {
                   </Pie>
                   <RechartsTooltip formatter={(value) => `${formatCurrencyFull(Number(value))}/mo`} contentStyle={tooltipStyle} />
                   <Legend wrapperStyle={{ fontSize: "12px", color: textColor }} />
-                  <DonutCenterLabel text={`${formatCurrencyShort(expenseData.reduce((s, d) => s + d.value, 0))}/mo`} color={textColor} />
+                  <DonutCenterLabel text={`${formatCurrencyFull(expenseData.reduce((s, d) => s + d.value, 0))}/mo`} color={textColor} />
                 </PieChart>
               </ResponsiveContainer>
             </ChartCard>
@@ -554,7 +573,7 @@ export default function Charts(props: ChartsProps) {
         {/* 9. Cumulative Cashflow Projection */}
         {cumulativeCashflowData.length > 0 && (
           <GridItem>
-            <ChartCard title="Cumulative Cashflow Projection" info="Starts at negative down payment, then adds annual cashflow each year. The dashed line marks break-even: when cumulative cashflow crosses zero, you've recovered your initial cash investment." {...cardProps}>
+            <ChartCard title="Cumulative Cashflow Projection" info="Starts at negative down payment, then adds annual cashflow each year. If annual rent increase is set, the cashflow grows over time. The dashed line marks break-even." {...cardProps}>
               <ResponsiveContainer width="100%" height={230}>
                 <LineChart data={cumulativeCashflowData} margin={{ left: 5, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />

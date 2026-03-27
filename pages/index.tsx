@@ -67,7 +67,8 @@ type Key =
   | "propertyTax"
   | "monthlyCosts"
   | "vacancyRate"
-  | "appreciationRate";
+  | "appreciationRate"
+  | "rentIncreaseRate";
 
 type Field = {
   key: Key;
@@ -108,6 +109,7 @@ const sections: Section[] = [
       { key: "propertyTax", name: "Annual property tax", step: 100, placeholder: "e.g. 1,000", min: 0 },
       { key: "monthlyCosts", name: "Monthly costs (charges, insurance, maintenance...)", step: 50, placeholder: "e.g. 150", min: 0 },
       { key: "vacancyRate", name: "Vacancy rate (%)", step: 1, placeholder: "e.g. 5", min: 0, max: 100 },
+      { key: "rentIncreaseRate", name: "Annual rent increase (%)", step: 0.5, placeholder: "e.g. 1.5", min: -10, max: 20 },
     ],
   },
 ];
@@ -160,6 +162,7 @@ const defaultState: State = {
   monthlyCosts: 150,
   vacancyRate: 5,
   appreciationRate: 0,
+  rentIncreaseRate: 0,
 };
 
 const Home: NextPage = () => {
@@ -761,9 +764,9 @@ const Home: NextPage = () => {
         monthlyCosts={Number(state.monthlyCosts)}
         annualPropertyTax={Number(state.propertyTax)}
         vacancyRate={Number(state.vacancyRate)}
-        cashflow={Number(cashflow)}
         downPayment={Number(downPayment)}
         appreciationRate={Number(state.appreciationRate)}
+        rentIncreaseRate={Number(state.rentIncreaseRate)}
         totalPrice={Number(totalPrice)}
         currency={currency}
       />
@@ -890,7 +893,12 @@ const formulas = [
   {
     title: "Equity Build-Up",
     formula: "Equity (payments) = Property base value - Remaining balance\nEquity (appreciation) = Base value x (1 + Rate)^Y - Base value\nTotal equity = Equity (payments) + Equity (appreciation)",
-    note: "Property base value = Purchase price + Renovation budget. The appreciation rate applies to property value only — it does not affect rent or cashflow calculations.",
+    note: "Property base value = Purchase price + Renovation budget. The appreciation rate applies to property value only, not rent.",
+  },
+  {
+    title: "Cumulative Cashflow Projection",
+    formula: "Year 0: -Down payment\nYear Y: Previous + Annual cashflow (yr Y)\nAnnual cashflow (yr Y) = (Cashflow at yr 0) adjusted for rent increase",
+    note: "If annual rent increase > 0%, the cashflow grows each year as rent rises. Property appreciation is not included here — see Equity Build-Up for that.",
   },
   {
     title: "Amortization (per month)",
