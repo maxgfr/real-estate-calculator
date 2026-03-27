@@ -90,7 +90,7 @@ const sections: Section[] = [
       { key: "housingPrice", name: "Purchase price", step: 10000, placeholder: "e.g. 150,000", min: 0 },
       { key: "notaryFees", name: "Closing costs (notary, agency...)", step: 1000, placeholder: "e.g. 12,000", min: 0 },
       { key: "houseWorks", name: "Renovation budget", step: 1000, placeholder: "0", min: 0 },
-      { key: "appreciationRate", name: "Annual appreciation rate (%)", step: 0.5, placeholder: "e.g. 2", min: -10, max: 20 },
+      { key: "appreciationRate", name: "Annual property appreciation (%)", step: 0.5, placeholder: "e.g. 2", min: -10, max: 20 },
     ],
   },
   {
@@ -141,7 +141,7 @@ const defaultState: State = {
   propertyTax: 1000,
   monthlyCosts: 150,
   vacancyRate: 5,
-  appreciationRate: 2,
+  appreciationRate: 0,
 };
 
 const Home: NextPage = () => {
@@ -708,7 +708,6 @@ const Home: NextPage = () => {
         notaryFees={Number(state.notaryFees)}
         houseWorks={Number(state.houseWorks)}
         loanAmount={Number(state.bankLoan)}
-        totalInterest={Number(totalMortgageInterest)}
         grossYield={Number(grossYield)}
         netYield={Number(netYield)}
         cashOnCash={Number(cashOnCash)}
@@ -847,7 +846,7 @@ const formulas = [
   {
     title: "Equity Build-Up",
     formula: "Equity (payments) = Property base value - Remaining balance\nEquity (appreciation) = Base value x (1 + Rate)^Y - Base value\nTotal equity = Equity (payments) + Equity (appreciation)",
-    note: "Property base value = Purchase price + Renovation budget.",
+    note: "Property base value = Purchase price + Renovation budget. The appreciation rate applies to property value only — it does not affect rent or cashflow calculations.",
   },
   {
     title: "Amortization (per month)",

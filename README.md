@@ -7,7 +7,7 @@
 ## Features
 
 - **14 financial metrics** — cashflow, yields, cash-on-cash, DSCR, GRM, break-even rent, and more
-- **9 interactive charts** — ROI, amortization, equity build-up, rent sensitivity, and more
+- **8 interactive charts** — ROI, amortization, equity build-up, rent sensitivity, and more
 - **Mortgage simulator** — accurate monthly payments with full interest breakdown
 - **Complete cost model** — vacancy rate, monthly costs, property tax, appreciation all factored in
 - **Shareable URLs** — every input is reflected in the URL, bookmark or share any scenario
@@ -143,6 +143,8 @@ Equity from appreciation = Property value (yr Y) - Property base value
 Total equity           = Equity from payments + Equity from appreciation
 ```
 
+The appreciation rate applies to **property value only** — it does not affect rent or cashflow calculations.
+
 ### Amortization (per month)
 
 ```
@@ -177,7 +179,7 @@ The calculator opens with pre-filled example values — just adjust the numbers 
 | Property | Purchase price | 150,000 |
 | Property | Closing costs (notary, agency...) | 12,000 |
 | Property | Renovation budget | 0 |
-| Property | Annual appreciation rate (%) | 2% |
+| Property | Annual property appreciation (%) | 0% |
 | Mortgage | Loan amount | 150,000 |
 | Mortgage | Interest rate (%) | 3.5% |
 | Mortgage | Loan term (years) | 20 |
@@ -214,7 +216,6 @@ The calculator opens with pre-filled example values — just adjust the numbers 
 | Monthly Expense Breakdown | Donut | Mortgage, charges, tax, vacancy loss |
 | ROI & Yield Metrics | Horizontal bar | Gross yield, net yield, cash-on-cash side by side |
 | Rent Sensitivity | Dual-axis line | Cashflow and net yield at rent -20% to +20% |
-| Mortgage Cost Split | Donut | Principal vs total interest |
 | Annual Principal vs Interest | Stacked bar | Per-year breakdown of mortgage payments |
 | Amortization Schedule | Area | Balance, cumulative interest, cumulative principal |
 | Equity Build-Up | Stacked area | Equity from payments + appreciation over time |
@@ -235,7 +236,7 @@ The calculator opens with pre-filled example values — just adjust the numbers 
 Every field is stored in the URL. Share or bookmark any scenario:
 
 ```
-https://maxgfr.github.io/real-estate-calculator/?housingPrice=150000&notaryFees=12000&houseWorks=0&appreciationRate=2&bankLoan=150000&bankRate=3.5&bankLoanPeriod=20&rent=750&propertyTax=1000&monthlyCosts=150&vacancyRate=5
+https://maxgfr.github.io/real-estate-calculator/?housingPrice=150000&notaryFees=12000&houseWorks=0&appreciationRate=0&bankLoan=150000&bankRate=3.5&bankLoanPeriod=20&rent=750&propertyTax=1000&monthlyCosts=150&vacancyRate=5
 ```
 
 ## Project Structure

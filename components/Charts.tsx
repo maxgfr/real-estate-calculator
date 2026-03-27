@@ -24,7 +24,6 @@ type ChartsProps = {
   notaryFees: number;
   houseWorks: number;
   loanAmount: number;
-  totalInterest: number;
   grossYield: number;
   netYield: number;
   cashOnCash: number;
@@ -243,7 +242,6 @@ export default function Charts(props: ChartsProps) {
     notaryFees,
     houseWorks,
     loanAmount,
-    totalInterest,
     grossYield,
     netYield,
     cashOnCash,
@@ -298,15 +296,6 @@ export default function Charts(props: ChartsProps) {
       ...(vacancyLoss > 0 ? [{ name: "Vacancy loss", value: Math.round(vacancyLoss) }] : []),
     ].filter((d) => d.value > 0);
   }, [monthlyMortgage, monthlyCosts, annualPropertyTax, monthlyRent, vacancyRate]);
-
-  const mortgageData = useMemo(
-    () =>
-      [
-        { name: "Principal", value: loanAmount, color: "#4299E1" },
-        { name: "Interest", value: totalInterest, color: "#FC8181" },
-      ].filter((d) => d.value > 0),
-    [loanAmount, totalInterest]
-  );
 
   const yieldData = useMemo(
     () => [
@@ -454,26 +443,7 @@ export default function Charts(props: ChartsProps) {
           </GridItem>
         )}
 
-        {/* 5. Mortgage Cost Split */}
-        {mortgageData.length > 0 && (
-          <GridItem>
-            <ChartCard title="Mortgage Cost Split" {...cardProps}>
-              <ResponsiveContainer width="100%" height={230}>
-                <PieChart>
-                  <Pie data={mortgageData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
-                    {mortgageData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip formatter={(value) => formatCurrencyFull(Number(value))} contentStyle={tooltipStyle} />
-                  <Legend wrapperStyle={{ fontSize: "12px", color: textColor }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </ChartCard>
-          </GridItem>
-        )}
-
-        {/* 6. Annual Principal vs Interest */}
+        {/* 5. Annual Principal vs Interest */}
         {annualBreakdownData.length > 0 && (
           <GridItem>
             <ChartCard title="Annual Principal vs Interest" {...cardProps}>
@@ -515,7 +485,7 @@ export default function Charts(props: ChartsProps) {
         {/* 8. Equity Build-Up */}
         {equityData.length > 0 && (
           <GridItem>
-            <ChartCard title={`Equity Build-Up (${appreciationRate}%/yr appreciation)`} {...cardProps}>
+            <ChartCard title={appreciationRate === 0 ? "Equity Build-Up" : `Equity Build-Up (+${appreciationRate}%/yr)`} {...cardProps}>
               <ResponsiveContainer width="100%" height={230}>
                 <AreaChart data={equityData} margin={{ left: 5, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
