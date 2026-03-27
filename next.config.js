@@ -1,11 +1,14 @@
 /** @type {import('next').NextConfig} */
 const isProd = process.env.NODE_ENV === 'production';
+const basePath = process.env.BASE_PATH !== undefined
+  ? process.env.BASE_PATH
+  : (isProd ? '/real-estate-calculator' : '');
 
 const nextConfig = {
   reactStrictMode: true,
   output: 'export',
-  basePath: isProd ? '/real-estate-calculator' : '',
-  assetPrefix: isProd ? '/real-estate-calculator' : '',
+  basePath,
+  assetPrefix: basePath,
   images: {
     unoptimized: true,
   },

@@ -1,0 +1,7 @@
+node_modules
+.next
+out
+.git
+coverage
+.DS_Store
+*.md

@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { NextPage } from "next";
 import Head from "next/head";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/router";
 import * as XLSX from "xlsx";
+
+const Charts = dynamic(() => import("../components/Charts"), { ssr: false });
 import {
   Box,
   Button,
@@ -648,6 +651,20 @@ const Home: NextPage = () => {
           </VStack>
         </GridItem>
       </Grid>
+
+      <Charts
+        housingPrice={Number(state.housingPrice)}
+        notaryFees={Number(state.notaryFees)}
+        houseWorks={Number(state.houseWorks)}
+        loanAmount={Number(state.bankLoan)}
+        totalInterest={Number(totalMortgageInterest)}
+        grossYield={Number(grossYield)}
+        netYield={Number(netYield)}
+        cashOnCash={Number(cashOnCash)}
+        bankRate={Number(state.bankRate)}
+        bankLoanPeriod={Number(state.bankLoanPeriod)}
+        monthlyMortgage={Number(monthlyMortgagePayment)}
+      />
     </Box>
   );
 };
