@@ -905,6 +905,21 @@ const formulas = [
     title: "Amortization (per month)",
     formula: "Interest = Remaining balance x Monthly rate\nPrincipal = Monthly payment - Interest\nNew balance = Remaining balance - Principal",
   },
+  {
+    title: "Annual Cashflow",
+    formula: "Annual cashflow (yr Y) = (Net income at yr Y - Mortgage) x 12\nMortgage = Monthly payment if Y <= Loan term, else 0",
+    note: "Same logic as cumulative cashflow, but shows each year individually. Green = profit, red = loss.",
+  },
+  {
+    title: "Income vs Expenses",
+    formula: "Annual income = Effective rent x 12\nAnnual expenses = Mortgage x 12 + Monthly costs x 12 + Property tax",
+    note: "The gap between income and expenses is your annual cashflow. After the loan ends, expenses drop sharply.",
+  },
+  {
+    title: "Total Return on Investment",
+    formula: "Total return = Cumulative cashflow + Equity\nEquity = Property value - Remaining loan balance\nCumulative cashflow = Sum of all annual cashflows - Down payment",
+    note: "The complete picture: combines rental cashflow and property equity into one metric.",
+  },
 ];
 
 const FormulasModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
@@ -915,13 +930,13 @@ const FormulasModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
   const noteColor = useColorModeValue("gray.500", "gray.400");
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="xl" scrollBehavior="inside">
+    <Modal isOpen={isOpen} onClose={onClose} size="4xl" scrollBehavior="inside">
       <ModalOverlay />
       <ModalContent>
         <ModalHeader fontSize="lg">Formulas</ModalHeader>
         <ModalCloseButton />
         <ModalBody pb={6}>
-          <VStack spacing={4} align="stretch">
+          <Grid templateColumns={{ base: "1fr", md: "1fr 1fr" }} gap={4}>
             {formulas.map((f) => (
               <Box key={f.title}>
                 <Text fontWeight="semibold" fontSize="sm" mb={1}>
@@ -944,7 +959,7 @@ const FormulasModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                 )}
               </Box>
             ))}
-          </VStack>
+          </Grid>
         </ModalBody>
       </ModalContent>
     </Modal>
