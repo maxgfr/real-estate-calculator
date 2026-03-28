@@ -825,6 +825,7 @@ const Home: NextPage = () => {
                         type="number"
                         value={state[key]}
                         onChange={(e) => onChangeState(key, e.target.value)}
+                        onWheel={(e) => (e.target as HTMLInputElement).blur()}
                         placeholder={placeholder}
                         min={min ?? 0}
                         max={max}
