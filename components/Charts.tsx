@@ -64,7 +64,7 @@ const EXPENSE_COLORS = ["#E53E3E", "#ED8936", "#9F7AEA", "#718096"];
 
 // --- Computation helpers ---
 
-function computeAmortization(
+export function computeAmortization(
   loanAmount: number,
   annualRate: number,
   years: number,
@@ -84,7 +84,9 @@ function computeAmortization(
     for (let m = 0; m < 12; m++) {
       if (balance <= 0) break;
       const interest = monthlyRate === 0 ? 0 : balance * monthlyRate;
-      const principal = Math.min(monthlyPayment - interest, balance);
+      const isLastPayment = y === years && m === 11;
+      const regularPrincipal = Math.min(monthlyPayment - interest, balance);
+      const principal = isLastPayment ? balance : regularPrincipal;
       balance = Math.max(0, balance - principal);
       cumInterest += interest;
       cumPrincipal += principal;
@@ -99,7 +101,7 @@ function computeAmortization(
   return data;
 }
 
-function computeAnnualPrincipalVsInterest(
+export function computeAnnualPrincipalVsInterest(
   loanAmount: number,
   annualRate: number,
   years: number,
@@ -117,7 +119,9 @@ function computeAnnualPrincipalVsInterest(
     for (let m = 0; m < 12; m++) {
       if (balance <= 0) break;
       const interest = monthlyRate === 0 ? 0 : balance * monthlyRate;
-      const principal = Math.min(monthlyPayment - interest, balance);
+      const isLastPayment = y === years && m === 11;
+      const regularPrincipal = Math.min(monthlyPayment - interest, balance);
+      const principal = isLastPayment ? balance : regularPrincipal;
       balance = Math.max(0, balance - principal);
       yearPrincipal += principal;
       yearInterest += interest;
@@ -160,7 +164,9 @@ function computeEquityBuildUp(
     for (let m = 0; m < 12; m++) {
       if (balance <= 0) break;
       const interest = monthlyRate === 0 ? 0 : balance * monthlyRate;
-      const principal = Math.min(monthlyPayment - interest, balance);
+      const isLastPayment = y === years - 1 && m === 11;
+      const regularPrincipal = Math.min(monthlyPayment - interest, balance);
+      const principal = isLastPayment ? balance : regularPrincipal;
       balance = Math.max(0, balance - principal);
     }
   }
@@ -319,7 +325,9 @@ function computeTotalReturn(
     for (let m = 0; m < 12; m++) {
       if (balance <= 0) break;
       const interest = monthlyRate === 0 ? 0 : balance * monthlyRate;
-      const principal = Math.min(monthlyMortgage - interest, balance);
+      const isLastPayment = y === loanPeriod - 1 && m === 11;
+      const regularPrincipal = Math.min(monthlyMortgage - interest, balance);
+      const principal = isLastPayment ? balance : regularPrincipal;
       balance = Math.max(0, balance - principal);
     }
   }
