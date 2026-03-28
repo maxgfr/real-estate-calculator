@@ -46,16 +46,20 @@ describe('getMonthlyMortgagePayment', () => {
 
 describe('getTotalMortgageInterest', () => {
   it('should calculate total interest correctly', () => {
-    // Example: $168,000 loan over 20 years with $972 monthly payment
-    const result = getTotalMortgageInterest('168000', '20', '972');
-    // Total interest = (monthly payment × total months) - loan amount
-    // = 972 * 240 - 168000 = 233280 - 168000 = 65280
-    expect(result).toBe('65280');
+    // Example: €230,000 loan at 3% for 25 years
+    // Exact monthly payment = 1090.686..., total = 1090.686 * 300 - 230000 ≈ 97206
+    const result = getTotalMortgageInterest('230000', '25', '3');
+    expect(Number(result)).toBeGreaterThanOrEqual(97205);
+    expect(Number(result)).toBeLessThanOrEqual(97207);
   });
 
-  it('should handle zero monthly payment', () => {
+  it('should handle zero interest rate', () => {
     const result = getTotalMortgageInterest('100000', '20', '0');
-    // Total interest = 0 * 240 - 100000 = -100000 → negative interest not possible, return '0'
+    expect(result).toBe('0');
+  });
+
+  it('should handle zero loan amount', () => {
+    const result = getTotalMortgageInterest('0', '20', '3');
     expect(result).toBe('0');
   });
 });
@@ -338,7 +342,7 @@ describe('getGRM', () => {
 describe('Edge cases and NaN handling', () => {
   it('should handle NaN inputs gracefully', () => {
     expect(getMonthlyMortgagePayment('invalid', '3.5', '20')).toBe('0');
-    expect(getTotalMortgageInterest('invalid', '20', '972')).toBe('0');
+    expect(getTotalMortgageInterest('invalid', '20', '3')).toBe('0');
     expect(getTotalPurchasePrice('invalid', '13000', '5000')).toBe('0');
   });
 });

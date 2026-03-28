@@ -1,11 +1,18 @@
 export const getTotalMortgageInterest = (
   loanAmount: string | number,
   loanDurationYears: string | number,
-  monthlyPayment: string | number,
+  interestRate: string | number,
   decimal = 0
 ): string => {
-  const months = Number(loanDurationYears) * 12;
-  const totalInterest = Number(monthlyPayment) * months - Number(loanAmount);
+  const P = Number(loanAmount);
+  const n = Number(loanDurationYears) * 12;
+  const r = Number(interestRate) / 100 / 12;
+
+  if (r === 0 || P <= 0 || n <= 0) return "0";
+
+  const exactPayment = (P * r) / (1 - Math.pow(1 + r, -n));
+  const totalInterest = exactPayment * n - P;
+
   return isNaN(totalInterest) || totalInterest < 0 ? "0" : totalInterest.toFixed(decimal);
 };
 

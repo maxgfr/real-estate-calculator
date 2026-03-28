@@ -244,14 +244,17 @@ const Home: NextPage = () => {
     [state.bankLoan, totalPrice]
   );
 
-  const monthlyMortgagePayment = useMemo(
+  // Full-precision value for all calculations
+  const monthlyMortgageExact = useMemo(
     () =>
-      getMonthlyMortgagePayment(
-        state.bankLoan,
-        state.bankRate,
-        state.bankLoanPeriod
-      ),
+      Number(getMonthlyMortgagePayment(state.bankLoan, state.bankRate, state.bankLoanPeriod, 10)),
     [state.bankLoan, state.bankRate, state.bankLoanPeriod]
+  );
+
+  // Rounded string for display only
+  const monthlyMortgagePayment = useMemo(
+    () => Math.round(monthlyMortgageExact).toFixed(0),
+    [monthlyMortgageExact]
   );
 
   const totalMortgageInterest = useMemo(
@@ -259,9 +262,9 @@ const Home: NextPage = () => {
       getTotalMortgageInterest(
         state.bankLoan,
         state.bankLoanPeriod,
-        monthlyMortgagePayment
+        state.bankRate
       ),
-    [state.bankLoan, state.bankLoanPeriod, monthlyMortgagePayment]
+    [state.bankLoan, state.bankLoanPeriod, state.bankRate]
   );
 
   const totalMortgageCost = useMemo(
@@ -294,9 +297,9 @@ const Home: NextPage = () => {
   );
 
   const cashflow = useMemo(() => {
-    const monthly = Number(netMonthlyIncome) - Number(monthlyMortgagePayment);
+    const monthly = Number(netMonthlyIncome) - monthlyMortgageExact;
     return Number.isNaN(monthly) ? "0" : monthly.toFixed(0);
-  }, [netMonthlyIncome, monthlyMortgagePayment]);
+  }, [netMonthlyIncome, monthlyMortgageExact]);
 
   const totalOperationCost = useMemo(
     () => getTotalOperationCost(totalPrice, totalMortgageInterest),
@@ -309,8 +312,8 @@ const Home: NextPage = () => {
   );
 
   const breakEvenRent = useMemo(
-    () => getBreakEvenRent(state.monthlyCosts, state.propertyTax, monthlyMortgagePayment, state.vacancyRate),
-    [state.monthlyCosts, state.propertyTax, monthlyMortgagePayment, state.vacancyRate]
+    () => getBreakEvenRent(state.monthlyCosts, state.propertyTax, monthlyMortgageExact, state.vacancyRate),
+    [state.monthlyCosts, state.propertyTax, monthlyMortgageExact, state.vacancyRate]
   );
 
   const ltv = useMemo(
@@ -319,8 +322,8 @@ const Home: NextPage = () => {
   );
 
   const dscr = useMemo(
-    () => getDSCR(netMonthlyIncome, monthlyMortgagePayment),
-    [netMonthlyIncome, monthlyMortgagePayment]
+    () => getDSCR(netMonthlyIncome, monthlyMortgageExact),
+    [netMonthlyIncome, monthlyMortgageExact]
   );
 
   const grm = useMemo(
@@ -336,7 +339,6 @@ const Home: NextPage = () => {
     const costs = Number(state.monthlyCosts);
     const tax = Number(state.propertyTax);
     const vacancy = Number(state.vacancyRate);
-    const mortgage = Number(monthlyMortgagePayment);
     const dp = Number(downPayment);
     const base = Number(state.housingPrice) + Number(state.houseWorks);
 
@@ -358,7 +360,7 @@ const Home: NextPage = () => {
       const r = rent * Math.pow(1 + rentRate / 100, y - 1);
       const eff = r * (1 - vacancy / 100);
       const net = eff - costs - tax / 12;
-      cumulativeCF += (net - mortgage) * 12;
+      cumulativeCF += (net - monthlyMortgageExact) * 12;
     }
 
     // Total return = equity (property value, loan repaid) + cumulative cashflow
@@ -374,7 +376,7 @@ const Home: NextPage = () => {
       hasRentIncrease: rentRate !== 0,
       period,
     };
-  }, [state.bankLoanPeriod, state.appreciationRate, state.rentIncreaseRate, state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, monthlyMortgagePayment, downPayment, state.housingPrice, state.houseWorks]);
+  }, [state.bankLoanPeriod, state.appreciationRate, state.rentIncreaseRate, state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, monthlyMortgageExact, downPayment, state.housingPrice, state.houseWorks]);
 
   const onReset = () => {
     setState(defaultState);
@@ -853,7 +855,7 @@ const Home: NextPage = () => {
         cashOnCash={Number(cashOnCash)}
         bankRate={Number(state.bankRate)}
         bankLoanPeriod={Number(state.bankLoanPeriod)}
-        monthlyMortgage={Number(monthlyMortgagePayment)}
+        monthlyMortgage={monthlyMortgageExact}
         monthlyRent={Number(state.rent)}
         monthlyCosts={Number(state.monthlyCosts)}
         annualPropertyTax={Number(state.propertyTax)}
