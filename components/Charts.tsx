@@ -1150,7 +1150,7 @@ export default function Charts(props: ChartsProps) {
         {/* Income vs Expenses */}
         {incomeVsExpensesData.length > 0 && (
           <GridItem>
-            <ChartCard title="Income vs Expenses" info="Compares annual rental income (green) against total expenses (red: mortgage + operating costs + property tax). The gap between the two areas is your annual cashflow. After the loan ends, expenses drop sharply." {...cardProps}>
+            <ChartCard title="Income vs Expenses" info="Compares annual rental income (green) against total expenses (red: mortgage + fixed costs + management fees + CapEx + property tax). Expenses grow with inflation. After the loan ends, expenses drop sharply." {...cardProps}>
               <ResponsiveContainer width="100%" height={230}>
                 <AreaChart data={incomeVsExpensesData} margin={{ left: 5, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />

@@ -86,6 +86,7 @@ type Field = {
   placeholder: string;
   min?: number;
   max?: number;
+  tooltip?: string;
 };
 
 type Section = {
@@ -97,32 +98,32 @@ const sections: Section[] = [
   {
     title: "Property 🏠",
     fields: [
-      { key: "housingPrice", name: "Purchase price", step: 10000, placeholder: "e.g. 150,000", min: 0 },
-      { key: "notaryFees", name: "Closing costs (notary, agency...)", step: 1000, placeholder: "e.g. 12,000", min: 0 },
-      { key: "houseWorks", name: "Renovation budget", step: 1000, placeholder: "0", min: 0 },
-      { key: "appreciationRate", name: "Annual property appreciation (%)", step: 0.5, placeholder: "e.g. 2", min: -10, max: 20 },
-      { key: "exitYear", name: "Exit year (sale)", step: 1, placeholder: "e.g. 10", min: 1, max: 50 },
+      { key: "housingPrice", name: "Purchase price", step: 10000, placeholder: "e.g. 150,000", min: 0, tooltip: "The total acquisition price of the property, excluding closing costs and renovation." },
+      { key: "notaryFees", name: "Closing costs (notary, agency...)", step: 1000, placeholder: "e.g. 12,000", min: 0, tooltip: "All fees paid at purchase: notary fees, agency commission, registration taxes, etc. Typically 7-10% for existing properties in France." },
+      { key: "houseWorks", name: "Renovation budget", step: 1000, placeholder: "0", min: 0, tooltip: "Total cost of planned renovations. Added to the property base value for appreciation calculations and to total investment." },
+      { key: "appreciationRate", name: "Annual property appreciation (%)", step: 0.5, placeholder: "e.g. 2", min: -10, max: 20, tooltip: "Expected annual increase in property value. Historical average ~2-3% in stable markets. Set to 0 for conservative estimates. Impacts equity build-up and exit scenario." },
+      { key: "exitYear", name: "Exit year (sale)", step: 1, placeholder: "e.g. 10", min: 1, max: 50, tooltip: "The year you plan to sell the property. Used to calculate sale price, capital gain, total profit, and ROI at exit." },
     ],
   },
   {
     title: "Mortgage 💳",
     fields: [
-      { key: "bankLoan", name: "Loan amount", step: 10000, placeholder: "e.g. 150,000", min: 0 },
-      { key: "bankRate", name: "Interest rate (%)", step: 0.1, placeholder: "e.g. 3.5", min: 0, max: 20 },
-      { key: "bankLoanPeriod", name: "Loan term (years)", step: 1, placeholder: "e.g. 20", min: 1, max: 50 },
+      { key: "bankLoan", name: "Loan amount", step: 10000, placeholder: "e.g. 150,000", min: 0, tooltip: "The amount borrowed from the bank. Down payment = Total investment − Loan amount. If loan > purchase price, you're financing renovation too." },
+      { key: "bankRate", name: "Interest rate (%)", step: 0.1, placeholder: "e.g. 3.5", min: 0, max: 20, tooltip: "Annual interest rate on the mortgage. Use the Rate Sensitivity chart to see how changes affect your cashflow and DSCR." },
+      { key: "bankLoanPeriod", name: "Loan term (years)", step: 1, placeholder: "e.g. 20", min: 1, max: 50, tooltip: "Duration of the mortgage. Longer term = lower monthly payment but more total interest. Typical: 15-25 years." },
     ],
   },
   {
     title: "Rental 💰",
     fields: [
-      { key: "rent", name: "Monthly rent", step: 100, placeholder: "e.g. 750", min: 0 },
-      { key: "propertyTax", name: "Annual property tax", step: 100, placeholder: "e.g. 1,000", min: 0 },
-      { key: "monthlyCosts", name: "Monthly fixed costs (charges, insurance, maintenance...)", step: 50, placeholder: "e.g. 150", min: 0 },
-      { key: "managementRate", name: "Management fees (% of rent)", step: 1, placeholder: "e.g. 8", min: 0, max: 100 },
-      { key: "capexRate", name: "CapEx reserve (% of gross rent)", step: 1, placeholder: "e.g. 5", min: 0, max: 50 },
-      { key: "vacancyRate", name: "Vacancy rate (%)", step: 1, placeholder: "e.g. 5", min: 0, max: 100 },
-      { key: "rentIncreaseRate", name: "Annual rent increase (%)", step: 0.5, placeholder: "e.g. 1.5", min: -10, max: 20 },
-      { key: "expenseInflationRate", name: "Annual expense inflation (%)", step: 0.5, placeholder: "e.g. 2", min: -5, max: 20 },
+      { key: "rent", name: "Monthly rent", step: 100, placeholder: "e.g. 750", min: 0, tooltip: "Gross monthly rent before any deductions. This is the amount the tenant pays. Use comparable rents in the area." },
+      { key: "propertyTax", name: "Annual property tax", step: 100, placeholder: "e.g. 1,000", min: 0, tooltip: "Annual property tax (taxe foncière). Increases with expense inflation rate in long-term projections." },
+      { key: "monthlyCosts", name: "Monthly fixed costs (charges, insurance, maintenance...)", step: 50, placeholder: "e.g. 150", min: 0, tooltip: "Fixed monthly charges: building fees (copropriété), landlord insurance (PNO), routine maintenance budget. These increase yearly with the expense inflation rate." },
+      { key: "managementRate", name: "Management fees (% of rent)", step: 1, placeholder: "e.g. 8", min: 0, max: 100, tooltip: "Property management company fees, calculated as a percentage of effective rent (after vacancy). Typical: 6-10%. Set to 0 if you self-manage." },
+      { key: "capexRate", name: "CapEx reserve (% of gross rent)", step: 1, placeholder: "e.g. 5", min: 0, max: 50, tooltip: "Capital Expenditure reserve for major repairs and replacements (roof, boiler, plumbing, appliances). Set aside monthly as % of gross rent. Industry standard: 5-10%. Not a real expense today but a provision for future large costs." },
+      { key: "vacancyRate", name: "Vacancy rate (%)", step: 1, placeholder: "e.g. 5", min: 0, max: 100, tooltip: "Percentage of time the property is vacant (no tenant). 5% ≈ 18 days/year. Reduces effective income. Typical: 3-8% depending on market." },
+      { key: "rentIncreaseRate", name: "Annual rent increase (%)", step: 0.5, placeholder: "e.g. 1.5", min: -10, max: 20, tooltip: "Expected annual rent increase. Tied to inflation index (IRL in France). Applied in all long-term projections. Typical: 1-3%." },
+      { key: "expenseInflationRate", name: "Annual expense inflation (%)", step: 0.5, placeholder: "e.g. 2", min: -5, max: 20, tooltip: "Annual increase in fixed costs and property tax. Reflects general inflation. Used in all projection charts. If your expenses grow faster than rent, cashflow erodes over time." },
     ],
   },
 ];
@@ -167,19 +168,19 @@ const defaultState: State = {
   housingPrice: 150000,
   notaryFees: 12000,
   houseWorks: 0,
-  bankLoan: 150000,
+  bankLoan: 120000,
   bankRate: 3.5,
-  bankLoanPeriod: 20,
-  rent: 750,
+  bankLoanPeriod: 25,
+  rent: 900,
   propertyTax: 1000,
-  monthlyCosts: 150,
+  monthlyCosts: 120,
   managementRate: 0,
   vacancyRate: 5,
-  appreciationRate: 0,
-  rentIncreaseRate: 0,
+  appreciationRate: 1.5,
+  rentIncreaseRate: 1.5,
   expenseInflationRate: 2,
-  capexRate: 5,
-  exitYear: 20,
+  capexRate: 3,
+  exitYear: 25,
 };
 
 const Home: NextPage = () => {
@@ -748,30 +749,38 @@ const Home: NextPage = () => {
 
             {/* At-a-glance summary */}
             <Grid templateColumns="1fr 1fr" gap={3}>
-              <Box p={3} bg={bgRecap} borderRadius="lg" borderWidth="1px" borderColor={borderInput} textAlign="center">
-                <Text fontSize="xs" color={textLabel} fontWeight="bold">CASHFLOW</Text>
-                <Text fontSize="lg" fontWeight="bold" color={Number(cashflow) >= 0 ? textCashflowPositive : textCashflowNegative}>
-                  {formatCurrency(cashflow)}<Text as="span" fontSize="xs" color={textLabel}>/mo</Text>
-                </Text>
-              </Box>
-              <Box p={3} bg={bgRecap} borderRadius="lg" borderWidth="1px" borderColor={borderInput} textAlign="center">
-                <Text fontSize="xs" color={textLabel} fontWeight="bold">CASH-ON-CASH</Text>
-                <Text fontSize="lg" fontWeight="bold" color={cashOnCash === 'N/A' ? textLabel : Number(cashOnCash) >= 0 ? textCashflowPositive : textCashflowNegative}>
-                  {cashOnCash === 'N/A' ? 'N/A' : `${Number(cashOnCash).toFixed(1)}%`}
-                </Text>
-              </Box>
-              <Box p={3} bg={bgRecap} borderRadius="lg" borderWidth="1px" borderColor={borderInput} textAlign="center">
-                <Text fontSize="xs" color={textLabel} fontWeight="bold">DSCR</Text>
-                <Text fontSize="lg" fontWeight="bold" color={dscr === '∞' ? textRendementBon : Number(dscr) >= 1.25 ? textRendementBon : Number(dscr) >= 1 ? textLabel : textCashflowNegative}>
-                  {dscr}
-                </Text>
-              </Box>
-              <Box p={3} bg={bgRecap} borderRadius="lg" borderWidth="1px" borderColor={borderInput} textAlign="center">
-                <Text fontSize="xs" color={textLabel} fontWeight="bold">BREAKEVEN</Text>
-                <Text fontSize="lg" fontWeight="bold" color={projections?.breakevenYear !== null ? textCashflowPositive : textCashflowNegative}>
-                  {projections?.breakevenYear !== null ? `Y${projections?.breakevenYear}` : "N/A"}
-                </Text>
-              </Box>
+              <Tooltip label="Net monthly income − mortgage. Positive = the property pays for itself." fontSize="xs" placement="top" hasArrow>
+                <Box p={3} bg={bgRecap} borderRadius="lg" borderWidth="1px" borderColor={borderInput} textAlign="center" cursor="help">
+                  <Text fontSize="xs" color={textLabel} fontWeight="bold">CASHFLOW</Text>
+                  <Text fontSize="lg" fontWeight="bold" color={Number(cashflow) >= 0 ? textCashflowPositive : textCashflowNegative}>
+                    {formatCurrency(cashflow)}<Text as="span" fontSize="xs" color={textLabel}>/mo</Text>
+                  </Text>
+                </Box>
+              </Tooltip>
+              <Tooltip label="Annual cashflow / down payment. Measures the return on the cash you invested. Target: > 8%." fontSize="xs" placement="top" hasArrow>
+                <Box p={3} bg={bgRecap} borderRadius="lg" borderWidth="1px" borderColor={borderInput} textAlign="center" cursor="help">
+                  <Text fontSize="xs" color={textLabel} fontWeight="bold">CASH-ON-CASH</Text>
+                  <Text fontSize="lg" fontWeight="bold" color={cashOnCash === 'N/A' ? textLabel : Number(cashOnCash) >= 0 ? textCashflowPositive : textCashflowNegative}>
+                    {cashOnCash === 'N/A' ? 'N/A' : `${Number(cashOnCash).toFixed(1)}%`}
+                  </Text>
+                </Box>
+              </Tooltip>
+              <Tooltip label="Debt Service Coverage Ratio = net income / mortgage. ≥ 1.25 = lender minimum. < 1.0 = income doesn't cover the mortgage." fontSize="xs" placement="top" hasArrow>
+                <Box p={3} bg={bgRecap} borderRadius="lg" borderWidth="1px" borderColor={borderInput} textAlign="center" cursor="help">
+                  <Text fontSize="xs" color={textLabel} fontWeight="bold">DSCR</Text>
+                  <Text fontSize="lg" fontWeight="bold" color={dscr === '∞' ? textRendementBon : Number(dscr) >= 1.25 ? textRendementBon : Number(dscr) >= 1 ? textLabel : textCashflowNegative}>
+                    {dscr}
+                  </Text>
+                </Box>
+              </Tooltip>
+              <Tooltip label="Year when cumulative cashflow turns positive — you've recovered your down payment from rental income." fontSize="xs" placement="top" hasArrow>
+                <Box p={3} bg={bgRecap} borderRadius="lg" borderWidth="1px" borderColor={borderInput} textAlign="center" cursor="help">
+                  <Text fontSize="xs" color={textLabel} fontWeight="bold">BREAKEVEN</Text>
+                  <Text fontSize="lg" fontWeight="bold" color={projections?.breakevenYear !== null ? textCashflowPositive : textCashflowNegative}>
+                    {projections?.breakevenYear !== null ? `Y${projections?.breakevenYear}` : "N/A"}
+                  </Text>
+                </Box>
+              </Tooltip>
             </Grid>
 
             {/* Cashflow - Highlighted */}
@@ -1046,10 +1055,17 @@ const Home: NextPage = () => {
                   {section.title}
                 </Text>
                 <VStack spacing={4}>
-                  {section.fields.map(({ key, name, step, placeholder, min, max }) => (
+                  {section.fields.map(({ key, name, step, placeholder, min, max, tooltip }) => (
                     <FormControl key={key}>
                       <FormLabel fontSize="sm" color={textLabel} mb={1}>
-                        {name}
+                        <HStack spacing={1} display="inline-flex">
+                          <Text as="span">{name}</Text>
+                          {tooltip && (
+                            <Tooltip shouldWrapChildren label={tooltip} fontSize="xs" placement="top" hasArrow maxW="280px">
+                              <InfoOutlineIcon boxSize="10px" color={textLabel} cursor="help" opacity={0.5} />
+                            </Tooltip>
+                          )}
+                        </HStack>
                       </FormLabel>
                       <Input
                         type="number"
@@ -1230,8 +1246,8 @@ const formulas = [
   },
   {
     title: "Cumulative Cashflow Projection",
-    formula: "Year 0: -Down payment\nYear Y: Previous + Annual cashflow (yr Y)\nAnnual cashflow (yr Y) = Effective rent - Management fees - Inflated costs - Inflated tax / 12 - Mortgage",
-    note: "Rent increases annually. Costs and property tax are inflated by the expense inflation rate. Management fees scale with rent. Property appreciation is not included here — see Equity Build-Up for that.",
+    formula: "Year 0: -Down payment\nYear Y: Previous + Annual cashflow (yr Y)\nAnnual cashflow (yr Y) = Effective rent - Management fees - CapEx - Inflated costs - Inflated tax / 12 - Mortgage",
+    note: "Rent increases annually. Costs and property tax are inflated by the expense inflation rate. Management fees and CapEx scale with rent. Property appreciation is not included here — see Equity Build-Up for that.",
   },
   {
     title: "Amortization (per month)",
@@ -1239,18 +1255,18 @@ const formulas = [
   },
   {
     title: "Cashflow After Loan",
-    formula: "Rent at year N = Monthly rent x (1 + Rent increase / 100)^N\nEffective rent = Rent at year N x (1 - Vacancy / 100)\nCashflow after loan = Effective rent - Management fees - Inflated costs - Inflated tax / 12",
-    note: "Monthly passive income once the loan is fully repaid. Costs and tax are inflated to year N. Management fees scale with projected rent.",
+    formula: "Rent at year N = Monthly rent x (1 + Rent increase / 100)^N\nEffective rent = Rent at year N x (1 - Vacancy / 100)\nCashflow after loan = Effective rent - Management fees - CapEx - Inflated costs - Inflated tax / 12",
+    note: "Monthly passive income once the loan is fully repaid. Costs and tax are inflated to year N. Management fees and CapEx scale with projected rent.",
   },
   {
     title: "Annual Cashflow",
-    formula: "Annual cashflow (yr Y) = (Net income at yr Y - Mortgage) x 12\nNet income = Effective rent - Management fees - Inflated costs - Inflated tax / 12\nMortgage = Monthly payment if Y <= Loan term, else 0",
-    note: "Same logic as cumulative cashflow, but shows each year individually. Expenses grow with inflation rate. Green = profit, red = loss.",
+    formula: "Annual cashflow (yr Y) = (Net income at yr Y - Mortgage) x 12\nNet income = Effective rent - Management fees - CapEx - Inflated costs - Inflated tax / 12\nMortgage = Monthly payment if Y <= Loan term, else 0",
+    note: "Same logic as cumulative cashflow, but shows each year individually. Expenses grow with inflation rate. Management fees and CapEx scale with rent. Green = profit, red = loss.",
   },
   {
     title: "Income vs Expenses",
-    formula: "Annual income = Effective rent x 12\nAnnual expenses = Mortgage x 12 + (Inflated costs + Management fees) x 12 + Inflated tax",
-    note: "Expenses grow with the inflation rate. Management fees scale with rent. After the loan ends, expenses drop sharply.",
+    formula: "Annual income = Effective rent x 12\nAnnual expenses = Mortgage x 12 + (Inflated costs + Management fees + CapEx) x 12 + Inflated tax",
+    note: "Expenses grow with the inflation rate. Management fees and CapEx scale with rent. After the loan ends, expenses drop sharply.",
   },
   {
     title: "Total Return on Investment",

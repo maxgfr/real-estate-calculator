@@ -44,18 +44,18 @@ The calculator opens with pre-filled example values — just adjust the numbers 
 | Property | Purchase price | 150,000 |
 | Property | Closing costs (notary, agency...) | 12,000 |
 | Property | Renovation budget | 0 |
-| Property | Annual property appreciation (%) | 0% |
-| Property | Exit year (sale) | 20 |
-| Mortgage | Loan amount | 150,000 |
+| Property | Annual property appreciation (%) | 1.5% |
+| Property | Exit year (sale) | 25 |
+| Mortgage | Loan amount | 120,000 |
 | Mortgage | Interest rate (%) | 3.5% |
-| Mortgage | Loan term (years) | 20 |
-| Rental | Monthly rent | 750 |
+| Mortgage | Loan term (years) | 25 |
+| Rental | Monthly rent | 900 |
 | Rental | Annual property tax | 1,000 |
-| Rental | Monthly fixed costs (charges, insurance, maintenance) | 150 |
+| Rental | Monthly fixed costs (charges, insurance, maintenance) | 120 |
 | Rental | Management fees (% of rent) | 0% |
-| Rental | CapEx reserve (% of gross rent) | 5% |
+| Rental | CapEx reserve (% of gross rent) | 3% |
 | Rental | Vacancy rate (%) | 5% |
-| Rental | Annual rent increase (%) | 0% |
+| Rental | Annual rent increase (%) | 1.5% |
 | Rental | Annual expense inflation (%) | 2% |
 
 ## Summary Metrics
