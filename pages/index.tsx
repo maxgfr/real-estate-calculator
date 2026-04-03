@@ -1255,7 +1255,7 @@ const formulas = [
   },
   {
     title: "Interest Rate Sensitivity",
-    formula: "For each rate variation (-1% to +2%):\nMonthly payment = P x [t(1+t)^n] / [(1+t)^n - 1]\nCashflow = Net income - Monthly payment\nDSCR = Net income / Monthly payment",
+    formula: "For each rate variation (-2% to +2%):\nMonthly payment = P x [t(1+t)^n] / [(1+t)^n - 1]\nCashflow = Net income - Monthly payment\nDSCR = Net income / Monthly payment",
     note: "Shows how sensitive your deal is to interest rate changes. Critical for variable-rate loans and refinancing decisions.",
   },
   {
@@ -1289,7 +1289,7 @@ const FormulasModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
   isOpen,
   onClose,
 }) => {
-  const codeBg = useColorModeValue("gray.50", "gray.700");
+  const codeBg = useColorModeValue("gray.50", "gray.900");
   const noteColor = useColorModeValue("gray.500", "gray.400");
 
   return (

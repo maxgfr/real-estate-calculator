@@ -99,7 +99,7 @@ Organized in five sections: **Overview**, **Mortgage**, **Investment**, **Exit &
 | Overview | Cashflow Waterfall | Stacked bar | Step-by-step from gross rent to cashflow |
 | Overview | ROI & Yield Metrics | Horizontal bar | Gross yield, net yield, cash-on-cash side by side |
 | Overview | Rent Sensitivity | Dual-axis line | Cashflow and net yield at rent -20% to +20% |
-| Overview | Interest Rate Sensitivity | Composed | Cashflow bars + DSCR line at rate -1% to +2% |
+| Overview | Interest Rate Sensitivity | Composed | Cashflow bars + DSCR line at rate -2% to +2% |
 | Overview | Deal Profile Radar | Radar | 4-axis spider chart (DSCR, CoC, Net Yield, GRM) |
 | Mortgage | Annual Principal vs Interest | Stacked bar | Per-year breakdown of mortgage payments |
 | Mortgage | Amortization Schedule | Area | Balance, cumulative interest, cumulative principal |

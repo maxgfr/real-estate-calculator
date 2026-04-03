@@ -531,7 +531,7 @@ function computeRateSensitivity(
   const data: { label: string; cashflow: number; dscr: number }[] = [];
   if (loanAmount <= 0 || bankLoanPeriod <= 0) return data;
 
-  const variations = [-1, -0.5, 0, 0.5, 1, 1.5, 2];
+  const variations = [-2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2];
   for (const delta of variations) {
     const rate = Math.max(0, bankRate + delta);
     const monthlyRate = rate / 100 / 12;
@@ -551,7 +551,7 @@ function computeRateSensitivity(
     const dscr = payment === 0 ? 0 : netIncome / payment;
 
     data.push({
-      label: delta === 0 ? `${rate.toFixed(1)}%` : `${delta > 0 ? "+" : ""}${delta}%`,
+      label: `${delta === 0 ? "" : delta > 0 ? "+" : ""}${delta}%`,
       cashflow: Math.round(cashflow),
       dscr: Number(dscr.toFixed(2)),
     });
@@ -1031,7 +1031,7 @@ export default function Charts(props: ChartsProps) {
         {/* Interest Rate Sensitivity */}
         {rateSensitivityData.length > 0 && (
           <GridItem>
-            <ChartCard title="Interest Rate Sensitivity" info="How your monthly cashflow and DSCR change if the interest rate moves. Shows the impact of rate changes from -1% to +2% vs your current rate. Critical for variable-rate loans." {...cardProps}>
+            <ChartCard title="Interest Rate Sensitivity" info="How your monthly cashflow and DSCR change if the interest rate moves. Shows the impact of rate changes from -2% to +2% vs your current rate. Critical for variable-rate loans." {...cardProps}>
               <ResponsiveContainer width="100%" height={230}>
                 <ComposedChart data={rateSensitivityData} margin={{ left: 5, right: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -1318,8 +1318,8 @@ export default function Charts(props: ChartsProps) {
                     <YAxis tick={{ fill: textColor, fontSize: 12 }} tickFormatter={(v) => formatCurrencyShort(Number(v))} />
                     <RechartsTooltip formatter={(value) => formatCurrencyFull(Number(value))} contentStyle={tooltipStyle} />
                     <ReferenceLine y={0} stroke={textColor} strokeDasharray="3 3" />
-                    <Area type="monotone" dataKey="optimistic" stroke="none" fill="#48BB78" fillOpacity={0.08} legendType="none" />
-                    <Area type="monotone" dataKey="pessimistic" stroke="none" fill="#FC8181" fillOpacity={0.08} legendType="none" />
+                    <Area type="monotone" dataKey="optimistic" stroke="none" fill="#48BB78" fillOpacity={0.08} legendType="none" tooltipType="none" />
+                    <Area type="monotone" dataKey="pessimistic" stroke="none" fill="#FC8181" fillOpacity={0.08} legendType="none" tooltipType="none" />
                     <Line type="monotone" dataKey="optimistic" name="Optimistic" stroke="#48BB78" strokeWidth={2} dot={false} />
                     <Line type="monotone" dataKey="base" name="Base" stroke="#4299E1" strokeWidth={2} dot={false} />
                     <Line type="monotone" dataKey="pessimistic" name="Pessimistic" stroke="#FC8181" strokeWidth={2} dot={false} />
