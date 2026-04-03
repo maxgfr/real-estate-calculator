@@ -13,6 +13,12 @@ import {
   getBreakEvenRent,
   getDSCR,
   getGRM,
+  computeExitScenario,
+  computeStressScenarios,
+  computeDealProfileScores,
+  getCapRate,
+  getOnePercentRule,
+  getOER,
 } from './index';
 
 describe('getMonthlyMortgagePayment', () => {
@@ -226,9 +232,9 @@ describe('getCashOnCash', () => {
     expect(Number(result)).toBeCloseTo(-39.1, 0);
   });
 
-  it('should return 0 when down payment is zero', () => {
+  it('should return N/A when down payment is zero (100% financed)', () => {
     const result = getCashOnCash('-4692', '0');
-    expect(result).toBe('0');
+    expect(result).toBe('N/A');
   });
 
   it('should handle positive cashflow', () => {
@@ -270,6 +276,27 @@ describe('getBreakEvenRent', () => {
     expect(result).toBe('870');
   });
 
+  it('should account for management fees', () => {
+    // costs=150, tax=1200(100/mo), mortgage=870, vacancy=0%, mgmt=8%
+    // (150 + 100 + 870) / (1 * 0.92) = 1120 / 0.92 ≈ 1217
+    const result = getBreakEvenRent('150', '1200', '870', '0', '8');
+    expect(Number(result)).toBeCloseTo(1217, 0);
+  });
+
+  it('should account for both vacancy and management fees', () => {
+    // costs=150, tax=1200(100/mo), mortgage=870, vacancy=5%, mgmt=8%
+    // (150 + 100 + 870) / (0.95 * 0.92) = 1120 / 0.874 ≈ 1281
+    const result = getBreakEvenRent('150', '1200', '870', '5', '8');
+    expect(Number(result)).toBeCloseTo(1281, 0);
+  });
+
+  it('should account for capex rate', () => {
+    // costs=150, tax=1200(100/mo), mortgage=870, vacancy=0%, mgmt=0%, capex=5%
+    // (150 + 100 + 870) / (1 * 1 - 0.05) = 1120 / 0.95 ≈ 1179
+    const result = getBreakEvenRent('150', '1200', '870', '0', '0', '5');
+    expect(Number(result)).toBeCloseTo(1179, 0);
+  });
+
   it('should handle NaN inputs', () => {
     const result = getBreakEvenRent('invalid', '1200', '870', '5');
     expect(result).toBe('0');
@@ -303,8 +330,8 @@ describe('getDSCR', () => {
     expect(Number(result)).toBeCloseTo(1.09, 1);
   });
 
-  it('should return 0 when mortgage is zero', () => {
-    expect(getDSCR('950', '0')).toBe('0');
+  it('should return ∞ when mortgage is zero (cash purchase)', () => {
+    expect(getDSCR('950', '0')).toBe('∞');
   });
 
   it('should handle negative net income', () => {
@@ -344,5 +371,125 @@ describe('Edge cases and NaN handling', () => {
     expect(getMonthlyMortgagePayment('invalid', '3.5', '20')).toBe('0');
     expect(getTotalMortgageInterest('invalid', '20', '3')).toBe('0');
     expect(getTotalPurchasePrice('invalid', '13000', '5000')).toBe('0');
+  });
+});
+
+describe('computeExitScenario', () => {
+  it('should return null for zero exit year', () => {
+    expect(computeExitScenario(0, 150000, 0, 2, 150000, 3.5, 20, 870, 12000, 750, 150, 1000, 5, 0, 0, 2)).toBeNull();
+  });
+
+  it('should calculate sale price with appreciation', () => {
+    const result = computeExitScenario(10, 150000, 0, 3, 150000, 3.5, 20, 870, 12000, 750, 150, 1000, 5, 0, 0, 2);
+    expect(result).not.toBeNull();
+    if (!result) return;
+    // 150000 * (1.03)^10 ≈ 201587
+    expect(result.salePrice).toBeGreaterThan(200000);
+    expect(result.salePrice).toBeLessThan(202000);
+  });
+
+  it('should have lower remaining balance at later exit year', () => {
+    const early = computeExitScenario(5, 150000, 0, 0, 150000, 3.5, 20, 870, 12000, 750, 150, 1000, 5, 0, 0, 2);
+    const late = computeExitScenario(15, 150000, 0, 0, 150000, 3.5, 20, 870, 12000, 750, 150, 1000, 5, 0, 0, 2);
+    expect(early).not.toBeNull();
+    expect(late).not.toBeNull();
+    if (!early || !late) return;
+    expect(late.remainingBalance).toBeLessThan(early.remainingBalance);
+  });
+
+  it('should return N/A for ROI when down payment is zero', () => {
+    const result = computeExitScenario(10, 150000, 0, 2, 150000, 3.5, 20, 870, 0, 750, 150, 1000, 5, 0, 0, 2);
+    expect(result).not.toBeNull();
+    if (!result) return;
+    expect(result.roi).toBe('N/A');
+  });
+});
+
+describe('computeStressScenarios', () => {
+  it('should return 3 scenarios', () => {
+    const result = computeStressScenarios(750, 150, 1000, 5, 870, 0, 20, 2, 0, 5, 12000, 150000, 0);
+    expect(result).toHaveLength(3);
+    expect(result[0].label).toBe('Optimistic');
+    expect(result[1].label).toBe('Base');
+    expect(result[2].label).toBe('Pessimistic');
+  });
+
+  it('should have optimistic cashflow >= base >= pessimistic', () => {
+    const result = computeStressScenarios(750, 150, 1000, 5, 870, 1, 20, 2, 0, 5, 12000, 150000, 0);
+    expect(result[0].cashflowY1).toBeGreaterThanOrEqual(result[1].cashflowY1);
+    expect(result[1].cashflowY1).toBeGreaterThanOrEqual(result[2].cashflowY1);
+  });
+
+  it('should return annual data arrays', () => {
+    const result = computeStressScenarios(750, 150, 1000, 5, 870, 0, 20, 2, 0, 5, 12000, 150000, 0);
+    // horizon = min(20+10, 40) = 30
+    expect(result[0].annualData.length).toBe(30);
+  });
+});
+
+describe('computeDealProfileScores', () => {
+  it('should return 4 metrics', () => {
+    const result = computeDealProfileScores(1.3, 8, 5, 14);
+    expect(result).toHaveLength(4);
+    expect(result.map(r => r.metric)).toEqual(['DSCR', 'Cash-on-Cash', 'Net Yield', 'GRM']);
+  });
+
+  it('should score excellent metrics near 100', () => {
+    const result = computeDealProfileScores(1.6, 12, 8, 8);
+    result.forEach(r => {
+      expect(r.score).toBeGreaterThanOrEqual(90);
+    });
+  });
+
+  it('should score poor metrics near 10', () => {
+    const result = computeDealProfileScores(0.5, -5, 0.5, 30);
+    result.forEach(r => {
+      expect(r.score).toBeLessThanOrEqual(20);
+    });
+  });
+
+  it('should handle infinite DSCR (no mortgage)', () => {
+    const result = computeDealProfileScores(Infinity, 8, 5, 14);
+    const dscrScore = result.find(r => r.metric === 'DSCR');
+    expect(dscrScore?.score).toBe(100);
+  });
+});
+
+describe('getCapRate', () => {
+  it('should calculate cap rate correctly', () => {
+    // NOI = 12000/yr, property value = 200000
+    // 12000 / 200000 * 100 = 6.0
+    expect(getCapRate('12000', '200000')).toBe('6.00');
+  });
+
+  it('should return 0 for zero property value', () => {
+    expect(getCapRate('12000', '0')).toBe('0');
+  });
+});
+
+describe('getOnePercentRule', () => {
+  it('should calculate 1% rule correctly', () => {
+    // 1500 rent / 150000 price * 100 = 1.0
+    expect(getOnePercentRule('1500', '150000')).toBe('1.00');
+  });
+
+  it('should detect below 1% rule', () => {
+    // 750 / 150000 * 100 = 0.5
+    expect(Number(getOnePercentRule('750', '150000'))).toBeLessThan(1);
+  });
+
+  it('should return 0 for zero price', () => {
+    expect(getOnePercentRule('750', '0')).toBe('0');
+  });
+});
+
+describe('getOER', () => {
+  it('should calculate OER correctly', () => {
+    // expenses = 400, income = 1000 → 40%
+    expect(getOER('400', '1000')).toBe('40.0');
+  });
+
+  it('should return 0 for zero income', () => {
+    expect(getOER('400', '0')).toBe('0');
   });
 });
