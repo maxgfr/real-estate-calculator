@@ -446,7 +446,7 @@ function computeROIByExitYear(
       vacancyRate, managementRate, rentIncreaseRate, expenseInflationRate, capexRate
     );
     if (result) {
-      data.push({ year: y, roi: Number(result.roi === 'N/A' ? '0' : result.roi) });
+      data.push({ year: y, roi: Number(result.annualizedRoi === 'N/A' ? '0' : result.annualizedRoi) });
     }
   }
   return data;
@@ -1283,7 +1283,7 @@ export default function Charts(props: ChartsProps) {
             {/* ROI by Exit Year */}
             {roiByExitYearData.length > 0 && (
               <GridItem>
-                <ChartCard title="ROI by Exit Year" info="Total return on investment (%) if you sell at each year. Helps identify the optimal time to sell. The vertical marker shows your selected exit year." {...cardProps}>
+                <ChartCard title="Annualized ROI by Exit Year" info="Annualized return on investment (%) if you sell at each year. Equivalent to the annual compound growth rate of your down payment. Helps compare with other investments and identify the optimal holding period." {...cardProps}>
                   <ResponsiveContainer width="100%" height={230}>
                     <LineChart data={roiByExitYearData} margin={{ left: 5, right: 10 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -1292,7 +1292,7 @@ export default function Charts(props: ChartsProps) {
                       <RechartsTooltip formatter={(value) => `${Number(value).toFixed(1)}%`} contentStyle={tooltipStyle} />
                       <ReferenceLine y={0} stroke={textColor} strokeDasharray="3 3" />
                       <ReferenceLine x={exitYear} stroke="#9F7AEA" strokeDasharray="5 3" strokeWidth={2} label={{ value: `Exit Y${exitYear}`, fill: "#9F7AEA", fontSize: 10, position: "top" }} />
-                      <Line type="monotone" dataKey="roi" name="Total ROI" stroke="#4299E1" strokeWidth={2} dot={{ r: 2, fill: "#4299E1" }} />
+                      <Line type="monotone" dataKey="roi" name="Annualized ROI" stroke="#4299E1" strokeWidth={2} dot={{ r: 2, fill: "#4299E1" }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </ChartCard>
