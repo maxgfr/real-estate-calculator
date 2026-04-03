@@ -1318,8 +1318,8 @@ export default function Charts(props: ChartsProps) {
                     <YAxis tick={{ fill: textColor, fontSize: 12 }} tickFormatter={(v) => formatCurrencyShort(Number(v))} />
                     <RechartsTooltip formatter={(value) => formatCurrencyFull(Number(value))} contentStyle={tooltipStyle} />
                     <ReferenceLine y={0} stroke={textColor} strokeDasharray="3 3" />
-                    <Area type="monotone" dataKey="optimistic" stroke="none" fill="#48BB78" fillOpacity={0.08} />
-                    <Area type="monotone" dataKey="pessimistic" stroke="none" fill="#FC8181" fillOpacity={0.08} />
+                    <Area type="monotone" dataKey="optimistic" stroke="none" fill="#48BB78" fillOpacity={0.08} legendType="none" />
+                    <Area type="monotone" dataKey="pessimistic" stroke="none" fill="#FC8181" fillOpacity={0.08} legendType="none" />
                     <Line type="monotone" dataKey="optimistic" name="Optimistic" stroke="#48BB78" strokeWidth={2} dot={false} />
                     <Line type="monotone" dataKey="base" name="Base" stroke="#4299E1" strokeWidth={2} dot={false} />
                     <Line type="monotone" dataKey="pessimistic" name="Pessimistic" stroke="#FC8181" strokeWidth={2} dot={false} />

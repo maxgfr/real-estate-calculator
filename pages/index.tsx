@@ -4,6 +4,7 @@ import Head from "next/head";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/router";
 import * as XLSX from "xlsx";
+import { buildExportSheets } from "../utils/export";
 
 const Charts = dynamic(() => import("../components/Charts"), { ssr: false });
 import {
@@ -494,103 +495,57 @@ const Home: NextPage = () => {
   };
 
   const onExport = () => {
-    // Remove currency formatting for Excel (use raw numbers)
-    const stripCurrency = (value: string): number => {
-      return Number(value.replace(/[^0-9.-]+/g, ""));
-    };
+    const strip = (value: string): number => Number(value.replace(/[^0-9.-]+/g, ""));
 
-    const stripPercent = (value: string): number => {
-      return Number(value.replace(/[^0-9.-]+/g, ""));
-    };
+    const sheets = buildExportSheets(
+      {
+        housingPrice: Number(state.housingPrice),
+        notaryFees: Number(state.notaryFees),
+        houseWorks: Number(state.houseWorks),
+        bankLoan: Number(state.bankLoan),
+        bankRate: Number(state.bankRate),
+        bankLoanPeriod: Number(state.bankLoanPeriod),
+        rent: Number(state.rent),
+        propertyTax: Number(state.propertyTax),
+        monthlyCosts: Number(state.monthlyCosts),
+        managementRate: Number(state.managementRate),
+        vacancyRate: Number(state.vacancyRate),
+        appreciationRate: Number(state.appreciationRate),
+        rentIncreaseRate: Number(state.rentIncreaseRate),
+        expenseInflationRate: Number(state.expenseInflationRate),
+        capexRate: Number(state.capexRate),
+        exitYear: Number(state.exitYear),
+      },
+      {
+        totalPrice: strip(totalPrice),
+        downPayment: strip(downPayment),
+        ltv,
+        monthlyMortgagePayment: strip(monthlyMortgagePayment),
+        totalMortgageCost: strip(totalMortgageCost),
+        totalMortgageInterest: strip(totalMortgageInterest),
+        totalOperationCost: strip(totalOperationCost),
+        netMonthlyIncome: strip(netMonthlyIncome),
+        cashflow: strip(cashflow),
+        breakEvenRent: strip(breakEvenRent),
+        grossYield,
+        netYield,
+        cashOnCash,
+        dscr,
+        grm,
+        capRate,
+        onePercentRule,
+        oer,
+      },
+      projections,
+      exitScenario,
+      stressScenarios
+    );
 
     const workbook = XLSX.utils.book_new();
-
-    // Purchase sheet
-    const purchaseData = [
-      ["Item", "Amount"],
-      ["Purchase price", stripCurrency(String(state.housingPrice))],
-      ["Closing costs", stripCurrency(String(state.notaryFees))],
-      ["Renovation budget", stripCurrency(String(state.houseWorks))],
-      ["Total", stripCurrency(totalPrice)],
-    ];
-    const purchaseSheet = XLSX.utils.aoa_to_sheet(purchaseData);
-    XLSX.utils.book_append_sheet(workbook, purchaseSheet, "Purchase");
-
-    // Mortgage sheet
-    const mortgageData = [
-      ["Item", "Amount", "Note"],
-      ["Loan amount", stripCurrency(String(state.bankLoan)), ""],
-      ["Interest rate", `${Number(state.bankRate).toFixed(2)} %`, "Annual"],
-      ["Duration", state.bankLoanPeriod, "Years"],
-      ["Monthly payment", stripCurrency(monthlyMortgagePayment), ""],
-      ["Total credit cost", stripCurrency(totalMortgageCost), ""],
-      ["Total interest", stripCurrency(totalMortgageInterest), ""],
-    ];
-    const mortgageSheet = XLSX.utils.aoa_to_sheet(mortgageData);
-    XLSX.utils.book_append_sheet(workbook, mortgageSheet, "Mortgage");
-
-    // Rental sheet
-    const effectiveRent =
-      stripCurrency(String(state.rent)) * (1 - Number(state.vacancyRate) / 100);
-    const rentalData = [
-      ["Item", "Amount (Monthly)", "Amount (Annual)"],
-      ["Gross rent", stripCurrency(String(state.rent)), stripCurrency(String(state.rent)) * 12],
-      ["Vacancy rate", `${Number(state.vacancyRate)} %`, ""],
-      ["Effective rent (after vacancy)", effectiveRent, effectiveRent * 12],
-      ["Monthly fixed costs (charges, insurance, maintenance)", stripCurrency(String(state.monthlyCosts)), stripCurrency(String(state.monthlyCosts)) * 12],
-      ["Management fees (% of rent)", `${Number(state.managementRate)} %`, ""],
-      ["Property tax", stripCurrency(String(state.propertyTax)) / 12, stripCurrency(String(state.propertyTax))],
-      ["Expense inflation rate", `${Number(state.expenseInflationRate)} %`, "Annual"],
-      ["CapEx reserve (% of gross rent)", `${Number(state.capexRate)} %`, ""],
-      ["Net monthly income", stripCurrency(netMonthlyIncome), stripCurrency(netMonthlyIncome) * 12],
-    ];
-    const rentalSheet = XLSX.utils.aoa_to_sheet(rentalData);
-    XLSX.utils.book_append_sheet(workbook, rentalSheet, "Rental");
-
-    // Results sheet
-    const resultsData = [
-      ["Metric", "Value", "Note"],
-      ["Total investment cost", stripCurrency(totalPrice), ""],
-      ["Down payment", stripCurrency(downPayment), ""],
-      ["Monthly mortgage payment", stripCurrency(monthlyMortgagePayment), ""],
-      ["Net monthly income (all-in)", stripCurrency(netMonthlyIncome), "After all expenses"],
-      ["Monthly cashflow", stripCurrency(cashflow), "Net income - Mortgage"],
-      ["Annual cashflow", stripCurrency(cashflow) * 12, ""],
-      ["Gross yield", stripPercent(grossYield) / 100, "Format: decimal"],
-      ["Net yield", stripPercent(netYield) / 100, "Format: decimal"],
-      ["Total interest paid", stripCurrency(totalMortgageInterest), ""],
-      ["Cash-on-cash return", cashOnCash === 'N/A' ? 'N/A' : stripPercent(cashOnCash) / 100, "Format: decimal"],
-      ["DSCR", dscr === '∞' ? '∞' : Number(dscr), "Debt Service Coverage Ratio"],
-      ["GRM", Number(grm), "Gross Rent Multiplier"],
-      ["Appreciation rate", `${Number(state.appreciationRate)} %`, "Annual (property value)"],
-      ["Rent increase rate", `${Number(state.rentIncreaseRate)} %`, "Annual"],
-      ["Expense inflation rate", `${Number(state.expenseInflationRate)} %`, "Annual (costs + tax)"],
-      ["Management fees", `${Number(state.managementRate)} %`, "Of effective rent"],
-      ["CapEx reserve", `${Number(state.capexRate)} %`, "Of gross rent"],
-      ["Cap Rate", capRate === '0' ? 'N/A' : `${capRate} %`, "NOI / Property value"],
-      ["1% Rule", `${onePercentRule} %`, "Monthly rent / Purchase price"],
-      ["OER", `${oer} %`, "Operating expenses / Income"],
-      ["", "", ""],
-      ["--- Projections ---", "", `At year ${projections?.period ?? Number(state.bankLoanPeriod)}`],
-      ["Property value at loan end", projections?.propertyValue ?? 0, "Including appreciation"],
-      ["Monthly rent at loan end", projections?.rentAtEnd ?? 0, "Including rent increases"],
-      ["Cashflow after loan (monthly)", projections?.cashflowAfterLoan ?? 0, "Passive income, no mortgage"],
-      ["Cumulative cashflow", projections?.cumulativeCashflow ?? 0, "Over full loan period"],
-      ["Total return", projections?.totalReturn ?? 0, "Equity + cumulative cashflow"],
-      ["Breakeven year", projections?.breakevenYear ?? "N/A", "Year cumulative cashflow turns positive"],
-      ["", "", ""],
-      ["--- Exit scenario ---", "", `At year ${state.exitYear}`],
-      ["Sale price", exitScenario?.salePrice ?? 0, "With appreciation"],
-      ["Capital gain", exitScenario?.capitalGain ?? 0, "Sale price - purchase - renovation"],
-      ["Remaining balance", exitScenario?.remainingBalance ?? 0, "Outstanding loan"],
-      ["Total profit", exitScenario?.totalProfit ?? 0, "Cashflow + sale - balance"],
-      ["ROI", exitScenario?.roi ?? "N/A", ""],
-      ["Annualized ROI", exitScenario?.annualizedRoi ?? "N/A", ""],
-    ];
-    const resultsSheet = XLSX.utils.aoa_to_sheet(resultsData);
-    XLSX.utils.book_append_sheet(workbook, resultsSheet, "Results");
-
-    // Generate and download
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheets.purchase), "Purchase");
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheets.mortgage), "Mortgage");
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheets.rental), "Rental");
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheets.results), "Results");
     XLSX.writeFile(workbook, `rental-roi-${new Date().toISOString().split("T")[0]}.xlsx`);
   };
 
