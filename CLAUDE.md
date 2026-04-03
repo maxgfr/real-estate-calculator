@@ -21,19 +21,20 @@ npx jest path/to/file # Run a single test file
 
 ## Architecture
 
-**Data flow**: Input fields (12 params) → `useState` + URL sync → `useMemo` derived calculations → Results display + Charts
+**Data flow**: Input fields (16 params) → `useState` + URL sync → `useMemo` derived calculations → Results display + Charts
 
 Three layers with clear separation:
 
-- **`utils/index.ts`** — Pure calculation functions (mortgage, yields, metrics). All accept `string | number`, return formatted strings. Fully tested in `utils/index.test.ts`.
-- **`pages/index.tsx`** — Main (and only) page. Owns all state, derives ~15 memoized values, renders inputs/results, dynamically imports Charts (no SSR).
-- **`components/Charts.tsx`** — 11 Recharts visualizations. Contains its own computation functions (`computeAmortization`, `computeEquityBuildUp`, `computeTotalReturn`, etc.) that run month-by-month amortization simulations. Exported compute functions tested in `components/Charts.test.ts`.
+- **`utils/index.ts`** — Pure calculation functions (mortgage, yields, metrics, exit scenario, stress test, deal scoring). All accept `string | number`, return formatted strings. Fully tested in `utils/index.test.ts`.
+- **`pages/index.tsx`** — Main (and only) page. Owns all state, derives ~23 memoized values, renders inputs/results/at-a-glance card, dynamically imports Charts (no SSR).
+- **`components/Charts.tsx`** — 18 Recharts visualizations (pie, bar, area, line, composed, radar). Contains its own computation functions (`computeAmortization`, `computeEquityBuildUp`, `computeTotalReturn`, `computeExpenseDecomposition`, `computeROIByExitYear`, etc.) that run month-by-month amortization simulations. Exported compute functions tested in `components/Charts.test.ts`.
 
 ## Key Patterns
 
 - **URL-based state**: All inputs stored as query params via `router.replace()` with `shallow: true`. No Redux/Context.
 - **Multi-currency**: 5 currencies (EUR/USD/GBP/CHF/CAD) with locale-aware formatting via `Intl.NumberFormat`.
 - **Amortization loops**: Several chart functions simulate month-by-month loan payments. The monthly payment from `getMonthlyMortgagePayment()` is rounded to 0 decimals, so these loops adjust the final payment to fully pay off any residual balance (balloon payment pattern).
+- **Projection model**: All projection functions inflate fixed costs and property tax by `expenseInflationRate` each year, compute management fees as `% of effective rent`, and CapEx as `% of gross rent`. Rent increases with `rentIncreaseRate`. This ensures realistic long-term projections where expenses grow alongside income.
 - **Static export**: `output: 'export'` in next.config.js, `basePath: '/real-estate-calculator'` in production. Deployed via GitHub Pages + Docker/Nginx.
 
 ## Tech Stack

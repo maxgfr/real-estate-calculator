@@ -1211,7 +1211,7 @@ export default function Charts(props: ChartsProps) {
         {/* Cumulative Cashflow Projection */}
         {cumulativeCashflowData.length > 0 && (
           <GridItem>
-            <ChartCard title="Cumulative Cashflow Projection" info="Starts at negative down payment, then adds annual cashflow each year. After the loan ends (vertical line), mortgage drops to zero and cashflow improves. The horizontal dashed line marks break-even." {...cardProps}>
+            <ChartCard title="Cumulative Cashflow Projection" info="Starts at negative down payment, then adds annual cashflow each year. Includes rent increases, expense inflation, management fees, and CapEx. After the loan ends (vertical line), mortgage drops to zero. Purple marker = breakeven year." {...cardProps}>
               <ResponsiveContainer width="100%" height={230}>
                 <LineChart data={cumulativeCashflowData} margin={{ left: 5, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />

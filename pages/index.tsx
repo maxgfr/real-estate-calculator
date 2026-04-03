@@ -857,7 +857,7 @@ const Home: NextPage = () => {
                 <FlexRow label="Total operation cost" value={formatCurrency(totalOperationCost)} tooltip="Total investment + total interest paid. The true all-in cost of the operation." />
 
                 <SectionLabel label="Rental" />
-                <FlexRow label="Net monthly income" value={formatCurrency(netMonthlyIncome)} color={textRevenu} tooltip="Effective rent (gross rent × (1 − vacancy rate)) − monthly costs − property tax / 12" />
+                <FlexRow label="Net monthly income" value={formatCurrency(netMonthlyIncome)} color={textRevenu} tooltip="Effective rent − management fees − CapEx − monthly fixed costs − property tax / 12. Effective rent = gross rent × (1 − vacancy rate). Management fees = % of effective rent. CapEx = % of gross rent." />
                 <FlexRow
                   label="Monthly cashflow"
                   value={formatCurrency(cashflow)}
@@ -870,11 +870,11 @@ const Home: NextPage = () => {
                   color={Number(cashflow) >= 0 ? textCashflowPositive : textCashflowNegative}
                   tooltip="Monthly cashflow × 12. Total gain or loss per year after all costs and mortgage."
                 />
-                <FlexRow label="Break-even rent" value={formatCurrency(breakEvenRent)} tooltip="Minimum monthly rent to reach zero cashflow: (costs + tax/12 + mortgage) / (1 − vacancy rate)" />
+                <FlexRow label="Break-even rent" value={formatCurrency(breakEvenRent)} tooltip="Minimum monthly rent to reach zero cashflow: (costs + tax/12 + mortgage) / ((1 − vacancy%) × (1 − mgmt%) − capex%). Accounts for vacancy, management fees, and CapEx reserve." />
 
                 <SectionLabel label="Performance" />
                 <FlexRow label="Gross yield" value={formatPercent(grossYield)} tooltip="(Annual rent / Total investment) × 100. Uses total investment (purchase + closing + renovation), more conservative than market listings using purchase price only. Does not account for expenses — use net yield for a realistic view." />
-                <FlexRow label="Net yield" value={formatPercent(netYield)} color={Number(netYield) >= 3 ? textRendementBon : textRendementFaible} tooltip="(Net annual income / Total investment) × 100. More realistic than gross yield — accounts for vacancy, costs and taxes. Target: >5% excellent, 3-5% good." />
+                <FlexRow label="Net yield" value={formatPercent(netYield)} color={Number(netYield) >= 3 ? textRendementBon : textRendementFaible} tooltip="(Net annual income / Total investment) × 100. Accounts for vacancy, management fees, CapEx, fixed costs, and property tax. Target: >5% excellent, 3-5% good." />
                 <FlexRow
                   label="Cash-on-cash return"
                   value={cashOnCash === 'N/A' ? 'N/A' : formatPercent(cashOnCash)}
@@ -933,13 +933,13 @@ const Home: NextPage = () => {
                       label="Cashflow after loan"
                       value={formatCurrency(String(projections.cashflowAfterLoan))}
                       color={projections.cashflowAfterLoan >= 0 ? textCashflowPositive : textCashflowNegative}
-                      tooltip="Monthly passive income once the loan is fully repaid (no more mortgage). Uses projected rent if annual increase is set."
+                      tooltip="Monthly passive income once the loan is fully repaid. Uses projected rent (with annual increase), inflated costs and property tax, and scaled management fees and CapEx."
                     />
                     <FlexRow
                       label="Cumulative cashflow"
                       value={formatCurrency(String(projections.cumulativeCashflow))}
                       color={projections.cumulativeCashflow >= 0 ? textCashflowPositive : textCashflowNegative}
-                      tooltip={`Total cashflow accumulated over ${projections.period} years, including initial down payment.`}
+                      tooltip={`Total cashflow accumulated over ${projections.period} years (starts at −down payment). Includes rent increases, expense inflation, management fees, and CapEx each year.`}
                     />
                     <FlexRow
                       label="Total return"
