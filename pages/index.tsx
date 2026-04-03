@@ -45,7 +45,6 @@ import {
   getDownPayment,
   getTotalMortgageInterest,
   getMonthlyMortgagePayment,
-  getNetMonthlyIncomeDetailed,
   getTotalMortgageCost,
   getTotalPurchasePrice,
   getYield,
@@ -291,22 +290,20 @@ const Home: NextPage = () => {
     [state.bankLoan, totalMortgageInterest]
   );
 
-  const netMonthlyIncome = useMemo(() => {
-    const base = Number(
-      getNetMonthlyIncomeDetailed(
-        state.rent,
-        state.monthlyCosts,
-        state.propertyTax,
-        "0",
-        state.managementRate,
-        "0",
-        state.vacancyRate
-      )
-    );
+  // Full-precision net monthly income for all calculations
+  const netMonthlyIncomeExact = useMemo(() => {
+    const effectiveRent = Number(state.rent) * (1 - Number(state.vacancyRate) / 100);
+    const managementFees = effectiveRent * (Number(state.managementRate) / 100);
     const capex = Number(state.rent) * Number(state.capexRate) / 100;
-    const net = base - capex;
-    return isNaN(net) ? "0" : net.toFixed(0);
+    const net = effectiveRent - Number(state.monthlyCosts) - Number(state.propertyTax) / 12 - managementFees - capex;
+    return isNaN(net) ? 0 : net;
   }, [state.rent, state.monthlyCosts, state.propertyTax, state.managementRate, state.vacancyRate, state.capexRate]);
+
+  // Rounded string for display only
+  const netMonthlyIncome = useMemo(
+    () => netMonthlyIncomeExact.toFixed(0),
+    [netMonthlyIncomeExact]
+  );
 
   const grossYield = useMemo(
     () => getYield(Number(state.rent) * 12, totalPrice),
@@ -314,14 +311,21 @@ const Home: NextPage = () => {
   );
 
   const netYield = useMemo(
-    () => getYield(Number(netMonthlyIncome) * 12, totalPrice),
-    [netMonthlyIncome, totalPrice]
+    () => getYield(netMonthlyIncomeExact * 12, totalPrice),
+    [netMonthlyIncomeExact, totalPrice]
   );
 
-  const cashflow = useMemo(() => {
-    const monthly = Number(netMonthlyIncome) - monthlyMortgageExact;
-    return Number.isNaN(monthly) ? "0" : monthly.toFixed(0);
-  }, [netMonthlyIncome, monthlyMortgageExact]);
+  // Full-precision cashflow for all calculations
+  const cashflowExact = useMemo(
+    () => netMonthlyIncomeExact - monthlyMortgageExact,
+    [netMonthlyIncomeExact, monthlyMortgageExact]
+  );
+
+  // Rounded string for display only
+  const cashflow = useMemo(
+    () => Number.isNaN(cashflowExact) ? "0" : cashflowExact.toFixed(0),
+    [cashflowExact]
+  );
 
   const totalOperationCost = useMemo(
     () => getTotalOperationCost(totalPrice, totalMortgageInterest),
@@ -329,8 +333,8 @@ const Home: NextPage = () => {
   );
 
   const cashOnCash = useMemo(
-    () => getCashOnCash(Number(cashflow) * 12, downPayment),
-    [cashflow, downPayment]
+    () => getCashOnCash(cashflowExact * 12, downPayment),
+    [cashflowExact, downPayment]
   );
 
   const breakEvenRent = useMemo(
@@ -344,8 +348,8 @@ const Home: NextPage = () => {
   );
 
   const dscr = useMemo(
-    () => getDSCR(netMonthlyIncome, monthlyMortgageExact),
-    [netMonthlyIncome, monthlyMortgageExact]
+    () => getDSCR(netMonthlyIncomeExact, monthlyMortgageExact),
+    [netMonthlyIncomeExact, monthlyMortgageExact]
   );
 
   const grm = useMemo(
@@ -379,9 +383,9 @@ const Home: NextPage = () => {
     const effectiveRent = Number(state.rent) * (1 - Number(state.vacancyRate) / 100);
     // netMonthlyIncome = effectiveRent - mgmt - capex - costs - tax/12 (no mortgage)
     // Operating expenses = effectiveRent - netMonthlyIncome
-    const operatingExpenses = effectiveRent - Number(netMonthlyIncome);
+    const operatingExpenses = effectiveRent - netMonthlyIncomeExact;
     return getOER(String(Math.max(0, operatingExpenses)), String(effectiveRent));
-  }, [state.rent, state.vacancyRate, netMonthlyIncome]);
+  }, [state.rent, state.vacancyRate, netMonthlyIncomeExact]);
 
   const projections = useMemo(() => {
     const period = Number(state.bankLoanPeriod);
@@ -768,7 +772,7 @@ const Home: NextPage = () => {
                 </StatNumber>
                 <StatHelpText as="div">
                   <Box>{Number(cashflow) >= 0 ? "✨ Positive" : "⚠️ Negative"}</Box>
-                  <Box fontSize="xs" mt={0.5}>Annual: {formatCurrency(String(Number(cashflow) * 12))}</Box>
+                  <Box fontSize="xs" mt={0.5}>Annual: {formatCurrency(String(Math.round(cashflowExact * 12)))}</Box>
                 </StatHelpText>
               </Stat>
             </Box>
@@ -836,7 +840,7 @@ const Home: NextPage = () => {
                 />
                 <FlexRow
                   label="Annual cashflow"
-                  value={formatCurrency(String(Number(cashflow) * 12))}
+                  value={formatCurrency(String(Math.round(cashflowExact * 12)))}
                   color={Number(cashflow) >= 0 ? textCashflowPositive : textCashflowNegative}
                   tooltip="Monthly cashflow × 12. Total gain or loss per year after all costs and mortgage."
                 />
