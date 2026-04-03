@@ -351,10 +351,14 @@ const Home: NextPage = () => {
     [state.housingPrice, state.rent]
   );
 
-  // NOI = Net income + mortgage (income before debt service) — annualized
+  // NOI = Effective rent - operating expenses (before debt service and CapEx reserve)
+  // CapEx is a capital reserve, not an operating expense — excluded from NOI per industry standard
   const noi = useMemo(() => {
-    return String((Number(netMonthlyIncome) + monthlyMortgageExact) * 12);
-  }, [netMonthlyIncome, monthlyMortgageExact]);
+    const effectiveRent = Number(state.rent) * (1 - Number(state.vacancyRate) / 100);
+    const mgmtFees = effectiveRent * (Number(state.managementRate) / 100);
+    const monthlyNOI = effectiveRent - mgmtFees - Number(state.monthlyCosts) - Number(state.propertyTax) / 12;
+    return String(monthlyNOI * 12);
+  }, [state.rent, state.vacancyRate, state.managementRate, state.monthlyCosts, state.propertyTax]);
 
   // Cap Rate = NOI / Property Value (purchase + renovation)
   const capRate = useMemo(
@@ -368,12 +372,14 @@ const Home: NextPage = () => {
     [state.rent, state.housingPrice]
   );
 
-  // OER = Monthly operating expenses / Monthly gross effective income
+  // OER = Monthly operating expenses / Monthly gross effective income (excludes mortgage)
   const oer = useMemo(() => {
     const effectiveRent = Number(state.rent) * (1 - Number(state.vacancyRate) / 100);
-    const expenses = effectiveRent - Number(netMonthlyIncome) + monthlyMortgageExact;
-    return getOER(String(expenses), String(effectiveRent));
-  }, [state.rent, state.vacancyRate, netMonthlyIncome, monthlyMortgageExact]);
+    // netMonthlyIncome = effectiveRent - mgmt - capex - costs - tax/12 (no mortgage)
+    // Operating expenses = effectiveRent - netMonthlyIncome
+    const operatingExpenses = effectiveRent - Number(netMonthlyIncome);
+    return getOER(String(Math.max(0, operatingExpenses)), String(effectiveRent));
+  }, [state.rent, state.vacancyRate, netMonthlyIncome]);
 
   const projections = useMemo(() => {
     const period = Number(state.bankLoanPeriod);
@@ -897,7 +903,7 @@ const Home: NextPage = () => {
                   label="Cap Rate"
                   value={formatPercent(capRate)}
                   color={Number(capRate) >= 6 ? textRendementBon : Number(capRate) >= 4 ? textRendementFaible : textCashflowNegative}
-                  tooltip="Capitalization Rate = Net Operating Income / Property Value × 100. NOI = net income before debt service. Industry standard for comparing properties regardless of financing. ≥ 6% good, 4-6% average, < 4% low."
+                  tooltip="Capitalization Rate = NOI / Property Value × 100. NOI = effective rent − management fees − fixed costs − property tax (before debt service and CapEx). Industry standard for comparing properties regardless of financing. ≥ 6% good, 4-6% average, < 4% low."
                 />
                 <FlexRow
                   label="1% Rule"
@@ -1258,8 +1264,8 @@ const formulas = [
   },
   {
     title: "Cap Rate",
-    formula: "NOI = Net monthly income + Mortgage payment (annualized)\nCap Rate = NOI / Property value x 100",
-    note: "Capitalization Rate. Measures property return independently of financing. Property value = Purchase price + Renovation. ≥ 6% good, 4-6% average, < 4% low. Industry standard for comparing properties.",
+    formula: "NOI = (Effective rent - Management fees - Fixed costs - Property tax / 12) x 12\nCap Rate = NOI / Property value x 100",
+    note: "Capitalization Rate. NOI excludes debt service and CapEx reserve (industry standard). Property value = Purchase price + Renovation. ≥ 6% good, 4-6% average, < 4% low.",
   },
   {
     title: "1% Rule",
