@@ -403,6 +403,37 @@ describe('computeExitScenario', () => {
     if (!result) return;
     expect(result.roi).toBe('N/A');
   });
+
+  it('should compute annualized ROI as CAGR of total return', () => {
+    const result = computeExitScenario(10, 150000, 0, 3, 150000, 3.5, 20, 870, 12000, 750, 150, 1000, 5, 0, 0, 2);
+    expect(result).not.toBeNull();
+    if (!result) return;
+    expect(result.annualizedRoi).not.toBe('N/A');
+    // Annualized ROI should be much smaller than total ROI
+    expect(Number(result.annualizedRoi)).toBeLessThan(Number(result.roi));
+    // Verify CAGR formula: (1 + totalProfit/dp)^(1/exitYear) - 1
+    const expected = (Math.pow(1 + result.totalProfit / 12000, 1 / 10) - 1) * 100;
+    expect(Number(result.annualizedRoi)).toBeCloseTo(expected, 0);
+  });
+
+  it('should return N/A annualized ROI when total loss exceeds down payment', () => {
+    // Very high loan, very low rent → deep negative return
+    const result = computeExitScenario(1, 150000, 0, 0, 150000, 3.5, 20, 870, 1000, 50, 500, 5000, 50, 0, 0, 0);
+    expect(result).not.toBeNull();
+    if (!result) return;
+    // totalProfit / dp <= -1 → annualizedRoi is N/A
+    expect(result.annualizedRoi).toBe('N/A');
+  });
+
+  it('should have annualized ROI converge for long horizons', () => {
+    const r10 = computeExitScenario(10, 150000, 0, 2, 120000, 3.5, 25, 601, 42000, 900, 120, 1000, 5, 0, 1.5, 2);
+    const r20 = computeExitScenario(20, 150000, 0, 2, 120000, 3.5, 25, 601, 42000, 900, 120, 1000, 5, 0, 1.5, 2);
+    expect(r10).not.toBeNull();
+    expect(r20).not.toBeNull();
+    if (!r10 || !r20) return;
+    // Annualized ROI should be in a reasonable range (not exploding like total ROI)
+    expect(Math.abs(Number(r10.annualizedRoi) - Number(r20.annualizedRoi))).toBeLessThan(5);
+  });
 });
 
 describe('computeStressScenarios', () => {

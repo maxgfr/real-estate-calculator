@@ -418,7 +418,7 @@ export function computeExpenseDecomposition(
 
 // --- ROI by exit year ---
 
-function computeROIByExitYear(
+export function computeROIByExitYear(
   housingPrice: number,
   houseWorks: number,
   appreciationRate: number,

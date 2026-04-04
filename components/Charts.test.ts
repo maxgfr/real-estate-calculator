@@ -1,4 +1,5 @@
-import { computeAmortization, computeAnnualPrincipalVsInterest, computeCumulativeCashflow, computeAnnualCashflow, computeTotalReturn, computeExpenseDecomposition } from './Charts';
+import { computeAmortization, computeAnnualPrincipalVsInterest, computeCumulativeCashflow, computeAnnualCashflow, computeTotalReturn, computeExpenseDecomposition, computeROIByExitYear } from './Charts';
+import { computeStressScenarios, computeExitScenario, getMonthlyMortgagePayment } from '../utils/index';
 
 describe('computeAmortization', () => {
   it('should return empty array for zero loan amount', () => {
@@ -298,5 +299,90 @@ describe('computeCumulativeCashflow with capex', () => {
     expect(y10noCapex).toBeDefined();
     expect(y10withCapex).toBeDefined();
     expect(y10withCapex?.cumulative).toBeLessThan(y10noCapex?.cumulative ?? 0);
+  });
+});
+
+describe('computeROIByExitYear', () => {
+  const mm = Number(getMonthlyMortgagePayment(120000, 3.5, 25, 10));
+
+  it('should return empty array when down payment is zero', () => {
+    expect(computeROIByExitYear(150000, 0, 2, 120000, 3.5, 25, mm, 0, 900, 120, 1000, 5, 0, 1.5, 2, 3)).toEqual([]);
+  });
+
+  it('should return data for each year up to horizon', () => {
+    const data = computeROIByExitYear(150000, 0, 2, 120000, 3.5, 25, mm, 42000, 900, 120, 1000, 5, 0, 1.5, 2, 3);
+    // horizon = min(25+10, 40) = 35
+    expect(data).toHaveLength(35);
+    expect(data[0].year).toBe(1);
+    expect(data[34].year).toBe(35);
+  });
+
+  it('should use annualized ROI (not total ROI)', () => {
+    const data = computeROIByExitYear(150000, 0, 2, 120000, 3.5, 25, mm, 42000, 900, 120, 1000, 5, 0, 1.5, 2, 3);
+    // Annualized ROI should stay in a reasonable range (not hundreds of percent)
+    // Total ROI at year 35 would be ~900%, but annualized should be ~7%
+    const lastYear = data[data.length - 1];
+    expect(lastYear.roi).toBeLessThan(30);
+    expect(lastYear.roi).toBeGreaterThan(0);
+  });
+
+  it('should match computeExitScenario annualizedRoi values', () => {
+    const data = computeROIByExitYear(150000, 0, 2, 120000, 3.5, 25, mm, 42000, 900, 120, 1000, 5, 0, 1.5, 2, 3);
+    // Verify a few points match the underlying computeExitScenario
+    for (const y of [1, 5, 10, 25]) {
+      const exitResult = computeExitScenario(y, 150000, 0, 2, 120000, 3.5, 25, mm, 42000, 900, 120, 1000, 5, 0, 1.5, 2, 3);
+      const chartPoint = data.find(d => d.year === y);
+      expect(chartPoint).toBeDefined();
+      expect(exitResult).not.toBeNull();
+      if (!exitResult || !chartPoint) continue;
+      const expected = exitResult.annualizedRoi === 'N/A' ? 0 : Number(exitResult.annualizedRoi);
+      expect(chartPoint.roi).toBe(expected);
+    }
+  });
+
+  it('should start negative (transaction costs) then become positive', () => {
+    const data = computeROIByExitYear(150000, 0, 2, 120000, 3.5, 25, mm, 42000, 900, 120, 1000, 5, 0, 1.5, 2, 3);
+    expect(data[0].roi).toBeLessThan(0);
+    const y10 = data.find(d => d.year === 10);
+    expect(y10?.roi).toBeGreaterThan(0);
+  });
+});
+
+describe('cashflow consistency between stress test and direct computation', () => {
+  // The main page computes cashflow as: effectiveRent - mgmt - capex - costs - tax/12 - mortgage
+  // The stress test base scenario should produce the same Y1 value
+  const configs = [
+    { rent: 900, costs: 120, tax: 1000, mgmt: 0, vac: 5, capex: 3, loan: 120000, rate: 3.5, period: 25 },
+    { rent: 750, costs: 150, tax: 1200, mgmt: 8, vac: 5, capex: 5, loan: 150000, rate: 4, period: 20 },
+    { rent: 1200, costs: 200, tax: 1500, mgmt: 10, vac: 8, capex: 7, loan: 200000, rate: 3, period: 25 },
+    { rent: 650, costs: 100, tax: 800, mgmt: 7, vac: 3, capex: 5, loan: 100000, rate: 3.8, period: 20 },
+  ];
+
+  for (const c of configs) {
+    it(`should match for rent=${c.rent} mgmt=${c.mgmt}% capex=${c.capex}%`, () => {
+      const mm = Number(getMonthlyMortgagePayment(c.loan, c.rate, c.period, 10));
+
+      // Direct computation (same as main page with full precision)
+      const effectiveRent = c.rent * (1 - c.vac / 100);
+      const mgmtFees = effectiveRent * (c.mgmt / 100);
+      const capex = c.rent * c.capex / 100;
+      const netIncome = effectiveRent - mgmtFees - capex - c.costs - c.tax / 12;
+      const annualDirect = Math.round((netIncome - mm) * 12);
+
+      // Stress test base case Y1
+      const stress = computeStressScenarios(c.rent, c.costs, c.tax, c.vac, mm, 1.5, c.period, 2, c.mgmt, c.capex, 42000, 150000, 1.5);
+      const baseCase = stress.find(s => s.label === 'Base')!;
+
+      expect(annualDirect).toBe(baseCase.cashflowY1);
+    });
+  }
+
+  it('should match computeAnnualCashflow Y1 with stress test base Y1', () => {
+    const mm = Number(getMonthlyMortgagePayment(120000, 3.5, 25, 10));
+    const annual = computeAnnualCashflow(900, 120, 1000, 5, mm, 1.5, 25, 2, 0, 3);
+    const stress = computeStressScenarios(900, 120, 1000, 5, mm, 1.5, 25, 2, 0, 3, 42000, 150000, 1.5);
+    const baseCase = stress.find(s => s.label === 'Base')!;
+
+    expect(annual[0].cashflow).toBe(baseCase.cashflowY1);
   });
 });
