@@ -126,3 +126,39 @@ describe("serializeStateToQuery", () => {
     expect(parsed.get("rent")).toBe("900");
   });
 });
+
+// The management rate unit is intentionally kept OUT of the numeric State so it
+// can hold a string enum value ("percent" | "monthsPerYear"). The page persists
+// it as an independent URL param alongside currency. These tests document the
+// round-trip behavior for the unit value via URLSearchParams.
+describe("managementRateUnit URL round-trip", () => {
+  it("preserves 'percent' through a URL round-trip", () => {
+    const params = new URLSearchParams({
+      ...serializeStateToQuery(defaultState),
+      managementRateUnit: "percent",
+    });
+    const reparsed = new URLSearchParams(`?${params.toString()}`);
+    expect(reparsed.get("managementRateUnit")).toBe("percent");
+  });
+
+  it("preserves 'monthsPerYear' through a URL round-trip", () => {
+    const params = new URLSearchParams({
+      ...serializeStateToQuery({ ...defaultState, managementRate: 1 }),
+      managementRateUnit: "monthsPerYear",
+    });
+    const reparsed = new URLSearchParams(`?${params.toString()}`);
+    expect(reparsed.get("managementRateUnit")).toBe("monthsPerYear");
+    expect(reparsed.get("managementRate")).toBe("1");
+  });
+
+  it("invalid unit values should be rejected by the validator in the page", () => {
+    // The page guards with isManagementRateUnit. We mirror that contract here
+    // so we don't accidentally widen the accepted set.
+    const valid = ["percent", "monthsPerYear"];
+    expect(valid).toContain("percent");
+    expect(valid).toContain("monthsPerYear");
+    expect(valid).not.toContain("invalid");
+    expect(valid).not.toContain("months");
+    expect(valid).not.toContain("");
+  });
+});

@@ -116,6 +116,27 @@ export const getNetMonthlyIncomeDetailed = (
 };
 
 /**
+ * Convert a management fee value into its monthly-percent equivalent.
+ *
+ * - unit = "percent": value is already a percent of monthly rent (used as-is).
+ * - unit = "monthsPerYear": value is the number of months of rent paid per year.
+ *   Equivalent monthly percent = (value × 100) / 12. (1 month/year = 8.33%/mo.)
+ *
+ * Returns 0 for invalid / negative inputs so downstream calculations stay safe.
+ */
+export type ManagementRateUnit = "percent" | "monthsPerYear";
+
+export const getEffectiveManagementRatePercent = (
+  managementRate: string | number,
+  unit: ManagementRateUnit | string = "percent"
+): number => {
+  const v = Number(managementRate);
+  if (!isFinite(v) || v < 0) return 0;
+  if (unit === "monthsPerYear") return (v * 100) / 12;
+  return v;
+};
+
+/**
  * Monthly amortized tenant search fee (agency fee for finding a new tenant).
  * The agency typically charges X months of rent once per tenant turnover.
  * To get a smooth monthly cost, we amortize over the average tenancy duration.

@@ -60,6 +60,8 @@ import {
   getOER,
   computeExitScenario,
   computeStressScenarios,
+  getEffectiveManagementRatePercent,
+  type ManagementRateUnit,
 } from "../utils";
 
 type Key =
@@ -122,7 +124,7 @@ const sections: Section[] = [
       { key: "rent", name: "Monthly rent", step: 100, placeholder: "e.g. 750", min: 0, tooltip: "Gross monthly rent before any deductions. This is the amount the tenant pays. Use comparable rents in the area." },
       { key: "propertyTax", name: "Annual property tax", step: 100, placeholder: "e.g. 1,000", min: 0, tooltip: "Annual property tax (taxe foncière). Increases with expense inflation rate in long-term projections." },
       { key: "monthlyCosts", name: "Monthly fixed costs (charges, insurance, maintenance...)", step: 50, placeholder: "e.g. 150", min: 0, tooltip: "Fixed monthly charges: building fees (copropriété), landlord insurance (PNO), routine maintenance budget. These increase yearly with the expense inflation rate." },
-      { key: "managementRate", name: "Management fees (% of rent)", step: 1, placeholder: "e.g. 8", min: 0, max: 100, tooltip: "Property management company fees, calculated as a percentage of effective rent (after vacancy). Typical: 6-10%. Set to 0 if you self-manage." },
+      { key: "managementRate", name: "Management fees (% of rent)", step: 1, placeholder: "e.g. 8", min: 0, max: 100, tooltip: "Property management company fees. Switch the unit selector to enter either as % of effective rent (typical: 6-10%) or as months of rent per year (typical: 1 month/year ≈ 8.33%). Set to 0 if you self-manage." },
       { key: "tenantSearchFeeMonths", name: "Tenant search fee (months of rent)", step: 0.1, placeholder: "e.g. 1", min: 0, max: 6, tooltip: "Agency fee for finding a new tenant, expressed in months of rent. Typical in France: 1 month when managed by an agency (sometimes 1.2 or 1.5 in expensive markets). The cost is amortized over the average tenancy duration. Set to 0 if you self-manage or if there is no tenant search fee." },
       { key: "tenancyDurationYears", name: "Avg. tenancy duration (years)", step: 0.5, placeholder: "e.g. 3", min: 0.5, max: 30, tooltip: "Average length of a tenancy. Used to amortize the tenant search fee. Default 3 years matches typical residential tenancies in France. Longer tenancies dilute the agency fee impact." },
       { key: "capexRate", name: "CapEx reserve (% of gross rent)", step: 1, placeholder: "e.g. 5", min: 0, max: 50, tooltip: "Capital Expenditure reserve for major repairs and replacements (roof, boiler, plumbing, appliances). Set aside monthly as % of gross rent. Industry standard: 5-10%. Not a real expense today but a provision for future large costs." },
@@ -190,10 +192,15 @@ const defaultState: State = {
   exitYear: 25,
 };
 
+const MGMT_UNIT_VALUES = ["percent", "monthsPerYear"] as const;
+const isManagementRateUnit = (v: unknown): v is ManagementRateUnit =>
+  typeof v === "string" && (MGMT_UNIT_VALUES as readonly string[]).includes(v);
+
 const Home: NextPage = () => {
   const router = useRouter();
   const [state, setState] = useState<State>(defaultState);
   const [currency, setCurrency] = useState<Currency>("EUR");
+  const [managementRateUnit, setManagementRateUnit] = useState<ManagementRateUnit>("percent");
   const { isOpen, onOpen, onClose } = useDisclosure();
   const formatCurrency = useMemo(() => makeFormatCurrency(currency), [currency]);
   const { colorMode, setColorMode } = useColorMode();
@@ -230,6 +237,10 @@ const Home: NextPage = () => {
       if (urlCurrency && CURRENCIES.some((c) => c.code === urlCurrency)) {
         setCurrency(urlCurrency as Currency);
       }
+      const urlUnit = router.query.managementRateUnit;
+      if (isManagementRateUnit(urlUnit)) {
+        setManagementRateUnit(urlUnit);
+      }
     }
   }, [router.query]);
 
@@ -238,7 +249,7 @@ const Home: NextPage = () => {
     if (!router.isReady) return;
     if (Object.keys(router.query).length === 0) {
       void router.replace(
-        { query: { ...serializeStateToQuery(defaultState), currency: "EUR" } },
+        { query: { ...serializeStateToQuery(defaultState), currency: "EUR", managementRateUnit: "percent" } },
         undefined,
         { shallow: true }
       );
@@ -258,6 +269,36 @@ const Home: NextPage = () => {
     const query = { ...router.query, currency: code };
     void router.replace({ query }, undefined, { shallow: true });
   };
+
+  const onChangeManagementRateUnit = (next: ManagementRateUnit) => {
+    if (next === managementRateUnit) return;
+    // Convert the displayed value so the underlying economic rate stays identical:
+    //   8% ⇄ 0.96 months/year, 10% ⇄ 1.2 months/year, etc.
+    const current = Number(state.managementRate);
+    let converted: number = current;
+    if (isFinite(current) && current > 0) {
+      converted = next === "monthsPerYear" ? (current * 12) / 100 : (current * 100) / 12;
+      // Round to 2 decimals for readability
+      converted = Math.round(converted * 100) / 100;
+    }
+    const newState = { ...state, managementRate: converted };
+    setState(newState);
+    setManagementRateUnit(next);
+    const query = {
+      ...router.query,
+      managementRate: String(converted),
+      managementRateUnit: next,
+    };
+    void router.replace({ query }, undefined, { shallow: true });
+  };
+
+  // Convert the user-entered management rate to its monthly-percent equivalent.
+  // If unit is "%", this is just the raw value. If unit is "months/year", we
+  // convert: 1 month/year = 8.33%/mo. Everything downstream uses this number.
+  const effectiveMgmtRatePercent = useMemo(
+    () => getEffectiveManagementRatePercent(state.managementRate, managementRateUnit),
+    [state.managementRate, managementRateUnit]
+  );
 
   const totalPrice = useMemo(
     () => getTotalPurchasePrice(state.housingPrice, state.notaryFees, state.houseWorks),
@@ -300,7 +341,7 @@ const Home: NextPage = () => {
   // Full-precision net monthly income for all calculations
   const netMonthlyIncomeExact = useMemo(() => {
     const effectiveRent = Number(state.rent) * (1 - Number(state.vacancyRate) / 100);
-    const managementFees = effectiveRent * (Number(state.managementRate) / 100);
+    const managementFees = effectiveRent * (effectiveMgmtRatePercent / 100);
     const capex = Number(state.rent) * Number(state.capexRate) / 100;
     const tsfMonths = Number(state.tenantSearchFeeMonths);
     const tsfYears = Number(state.tenancyDurationYears);
@@ -310,7 +351,7 @@ const Home: NextPage = () => {
         : 0;
     const net = effectiveRent - Number(state.monthlyCosts) - Number(state.propertyTax) / 12 - managementFees - capex - tenantSearchFee;
     return isNaN(net) ? 0 : net;
-  }, [state.rent, state.monthlyCosts, state.propertyTax, state.managementRate, state.vacancyRate, state.capexRate, state.tenantSearchFeeMonths, state.tenancyDurationYears]);
+  }, [state.rent, state.monthlyCosts, state.propertyTax, effectiveMgmtRatePercent, state.vacancyRate, state.capexRate, state.tenantSearchFeeMonths, state.tenancyDurationYears]);
 
   // Rounded string for display only
   const netMonthlyIncome = useMemo(
@@ -351,8 +392,8 @@ const Home: NextPage = () => {
   );
 
   const breakEvenRent = useMemo(
-    () => getBreakEvenRent(state.monthlyCosts, state.propertyTax, monthlyMortgageExact, state.vacancyRate, state.managementRate, state.capexRate, 0, state.tenantSearchFeeMonths, state.tenancyDurationYears),
-    [state.monthlyCosts, state.propertyTax, monthlyMortgageExact, state.vacancyRate, state.managementRate, state.capexRate, state.tenantSearchFeeMonths, state.tenancyDurationYears]
+    () => getBreakEvenRent(state.monthlyCosts, state.propertyTax, monthlyMortgageExact, state.vacancyRate, effectiveMgmtRatePercent, state.capexRate, 0, state.tenantSearchFeeMonths, state.tenancyDurationYears),
+    [state.monthlyCosts, state.propertyTax, monthlyMortgageExact, state.vacancyRate, effectiveMgmtRatePercent, state.capexRate, state.tenantSearchFeeMonths, state.tenancyDurationYears]
   );
 
   const ltv = useMemo(
@@ -375,7 +416,7 @@ const Home: NextPage = () => {
   // Tenant search fee is an operating expense (recurring agency cost) — included in NOI
   const noi = useMemo(() => {
     const effectiveRent = Number(state.rent) * (1 - Number(state.vacancyRate) / 100);
-    const mgmtFees = effectiveRent * (Number(state.managementRate) / 100);
+    const mgmtFees = effectiveRent * (effectiveMgmtRatePercent / 100);
     const tsfMonths = Number(state.tenantSearchFeeMonths);
     const tsfYears = Number(state.tenancyDurationYears);
     const tenantSearchFee =
@@ -384,7 +425,7 @@ const Home: NextPage = () => {
         : 0;
     const monthlyNOI = effectiveRent - mgmtFees - tenantSearchFee - Number(state.monthlyCosts) - Number(state.propertyTax) / 12;
     return String(monthlyNOI * 12);
-  }, [state.rent, state.vacancyRate, state.managementRate, state.monthlyCosts, state.propertyTax, state.tenantSearchFeeMonths, state.tenancyDurationYears]);
+  }, [state.rent, state.vacancyRate, effectiveMgmtRatePercent, state.monthlyCosts, state.propertyTax, state.tenantSearchFeeMonths, state.tenancyDurationYears]);
 
   // Cap Rate = NOI / Property Value (purchase + renovation)
   const capRate = useMemo(
@@ -418,7 +459,7 @@ const Home: NextPage = () => {
     const dp = Number(downPayment);
     const base = Number(state.housingPrice) + Number(state.houseWorks);
     const inflRate = Number(state.expenseInflationRate);
-    const mgmtRate = Number(state.managementRate);
+    const mgmtRate = effectiveMgmtRatePercent;
     const capex = Number(state.capexRate);
     const tsfMonths = Number(state.tenantSearchFeeMonths);
     const tsfYears = Number(state.tenancyDurationYears);
@@ -492,7 +533,7 @@ const Home: NextPage = () => {
       hasRentIncrease: rentRate !== 0,
       period,
     };
-  }, [state.bankLoanPeriod, state.appreciationRate, state.rentIncreaseRate, state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, state.expenseInflationRate, state.managementRate, state.capexRate, state.tenantSearchFeeMonths, state.tenancyDurationYears, monthlyMortgageExact, downPayment, state.housingPrice, state.houseWorks]);
+  }, [state.bankLoanPeriod, state.appreciationRate, state.rentIncreaseRate, state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, state.expenseInflationRate, effectiveMgmtRatePercent, state.capexRate, state.tenantSearchFeeMonths, state.tenancyDurationYears, monthlyMortgageExact, downPayment, state.housingPrice, state.houseWorks]);
 
   const exitScenario = useMemo(() => {
     return computeExitScenario(
@@ -500,28 +541,29 @@ const Home: NextPage = () => {
       Number(state.appreciationRate), Number(state.bankLoan), Number(state.bankRate),
       Number(state.bankLoanPeriod), monthlyMortgageExact, Number(downPayment),
       Number(state.rent), Number(state.monthlyCosts), Number(state.propertyTax),
-      Number(state.vacancyRate), Number(state.managementRate), Number(state.rentIncreaseRate),
+      Number(state.vacancyRate), effectiveMgmtRatePercent, Number(state.rentIncreaseRate),
       Number(state.expenseInflationRate), Number(state.capexRate),
       Number(state.tenantSearchFeeMonths), Number(state.tenancyDurationYears)
     );
-  }, [state.exitYear, state.housingPrice, state.houseWorks, state.appreciationRate, state.bankLoan, state.bankRate, state.bankLoanPeriod, monthlyMortgageExact, downPayment, state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, state.managementRate, state.rentIncreaseRate, state.expenseInflationRate, state.capexRate, state.tenantSearchFeeMonths, state.tenancyDurationYears]);
+  }, [state.exitYear, state.housingPrice, state.houseWorks, state.appreciationRate, state.bankLoan, state.bankRate, state.bankLoanPeriod, monthlyMortgageExact, downPayment, state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, effectiveMgmtRatePercent, state.rentIncreaseRate, state.expenseInflationRate, state.capexRate, state.tenantSearchFeeMonths, state.tenancyDurationYears]);
 
   const stressScenarios = useMemo(() => {
     const base = Number(state.housingPrice) + Number(state.houseWorks);
     return computeStressScenarios(
       Number(state.rent), Number(state.monthlyCosts), Number(state.propertyTax),
       Number(state.vacancyRate), monthlyMortgageExact, Number(state.rentIncreaseRate),
-      Number(state.bankLoanPeriod), Number(state.expenseInflationRate), Number(state.managementRate),
+      Number(state.bankLoanPeriod), Number(state.expenseInflationRate), effectiveMgmtRatePercent,
       Number(state.capexRate), Number(downPayment), base, Number(state.appreciationRate),
       Number(state.tenantSearchFeeMonths), Number(state.tenancyDurationYears)
     );
-  }, [state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, monthlyMortgageExact, state.rentIncreaseRate, state.bankLoanPeriod, state.expenseInflationRate, state.managementRate, state.capexRate, downPayment, state.housingPrice, state.houseWorks, state.appreciationRate, state.tenantSearchFeeMonths, state.tenancyDurationYears]);
+  }, [state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, monthlyMortgageExact, state.rentIncreaseRate, state.bankLoanPeriod, state.expenseInflationRate, effectiveMgmtRatePercent, state.capexRate, downPayment, state.housingPrice, state.houseWorks, state.appreciationRate, state.tenantSearchFeeMonths, state.tenancyDurationYears]);
 
   const onReset = () => {
     setState(defaultState);
     setCurrency("EUR");
+    setManagementRateUnit("percent");
     void router.replace(
-      { query: { ...serializeStateToQuery(defaultState), currency: "EUR" } },
+      { query: { ...serializeStateToQuery(defaultState), currency: "EUR", managementRateUnit: "percent" } },
       undefined,
       { shallow: true }
     );
@@ -541,7 +583,7 @@ const Home: NextPage = () => {
         rent: Number(state.rent),
         propertyTax: Number(state.propertyTax),
         monthlyCosts: Number(state.monthlyCosts),
-        managementRate: Number(state.managementRate),
+        managementRate: effectiveMgmtRatePercent,
         vacancyRate: Number(state.vacancyRate),
         appreciationRate: Number(state.appreciationRate),
         rentIncreaseRate: Number(state.rentIncreaseRate),
@@ -1045,11 +1087,19 @@ const Home: NextPage = () => {
                   {section.title}
                 </Text>
                 <VStack spacing={4}>
-                  {section.fields.map(({ key, name, step, placeholder, min, max, tooltip }) => (
+                  {section.fields.map(({ key, name, step, placeholder, min, max, tooltip }) => {
+                    const isMgmt = key === "managementRate";
+                    const displayName = isMgmt && managementRateUnit === "monthsPerYear"
+                      ? "Management fees (months/year)"
+                      : name;
+                    const displayPlaceholder = isMgmt && managementRateUnit === "monthsPerYear" ? "e.g. 1" : placeholder;
+                    const displayStep = isMgmt && managementRateUnit === "monthsPerYear" ? 0.1 : step;
+                    const displayMax = isMgmt && managementRateUnit === "monthsPerYear" ? 12 : max;
+                    return (
                     <FormControl key={key}>
                       <FormLabel fontSize="sm" color={textLabel} mb={1}>
                         <HStack spacing={1} display="inline-flex">
-                          <Text as="span">{name}</Text>
+                          <Text as="span">{displayName}</Text>
                           {tooltip && (
                             <Tooltip shouldWrapChildren label={tooltip} fontSize="xs" placement="top" hasArrow maxW="280px">
                               <InfoOutlineIcon boxSize="10px" color={textLabel} cursor="help" opacity={0.5} />
@@ -1057,24 +1107,53 @@ const Home: NextPage = () => {
                           )}
                         </HStack>
                       </FormLabel>
-                      <Input
-                        type="number"
-                        value={state[key]}
-                        onChange={(e) => onChangeState(key, e.target.value)}
-                        onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                        placeholder={placeholder}
-                        min={min ?? 0}
-                        max={max}
-                        step={step}
-                        size="md"
-                        borderRadius="md"
-                        bg={inputBg}
-                        borderColor={borderInput}
-                        color={inputText}
-                        _placeholder={{ color: inputPlaceholder }}
-                      />
+                      <HStack spacing={2} align="stretch">
+                        <Input
+                          type="number"
+                          value={state[key]}
+                          onChange={(e) => onChangeState(key, e.target.value)}
+                          onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                          placeholder={displayPlaceholder}
+                          min={min ?? 0}
+                          max={displayMax}
+                          step={displayStep}
+                          size="md"
+                          borderRadius="md"
+                          bg={inputBg}
+                          borderColor={borderInput}
+                          color={inputText}
+                          _placeholder={{ color: inputPlaceholder }}
+                          flex={isMgmt ? 1 : undefined}
+                        />
+                        {isMgmt && (
+                          <Menu>
+                            <MenuButton
+                              as={Button}
+                              size="md"
+                              variant="outline"
+                              borderColor={borderInput}
+                              bg={inputBg}
+                              color={inputText}
+                              fontWeight="normal"
+                              minW="110px"
+                              aria-label="Management fee unit"
+                            >
+                              {managementRateUnit === "monthsPerYear" ? "months/yr" : "% of rent"}
+                            </MenuButton>
+                            <MenuList>
+                              <MenuItem onClick={() => onChangeManagementRateUnit("percent")} fontWeight={managementRateUnit === "percent" ? "bold" : "normal"}>
+                                % of rent
+                              </MenuItem>
+                              <MenuItem onClick={() => onChangeManagementRateUnit("monthsPerYear")} fontWeight={managementRateUnit === "monthsPerYear" ? "bold" : "normal"}>
+                                months / year
+                              </MenuItem>
+                            </MenuList>
+                          </Menu>
+                        )}
+                      </HStack>
                     </FormControl>
-                  ))}
+                    );
+                  })}
                 </VStack>
               </Box>
             ))}
@@ -1101,7 +1180,7 @@ const Home: NextPage = () => {
         appreciationRate={Number(state.appreciationRate)}
         rentIncreaseRate={Number(state.rentIncreaseRate)}
         expenseInflationRate={Number(state.expenseInflationRate)}
-        managementRate={Number(state.managementRate)}
+        managementRate={effectiveMgmtRatePercent}
         capexRate={Number(state.capexRate)}
         tenantSearchFeeMonths={Number(state.tenantSearchFeeMonths)}
         tenancyDurationYears={Number(state.tenancyDurationYears)}
@@ -1269,6 +1348,11 @@ const formulas = [
     title: "CapEx Reserve",
     formula: "CapEx (monthly) = Monthly gross rent x CapEx rate / 100",
     note: "Capital expenditure reserve for major repairs (roof, HVAC, etc.). Deducted from net income. Scales with rent since it's a percentage of gross rent.",
+  },
+  {
+    title: "Management Fee Unit Conversion",
+    formula: "If unit = '%': effective monthly rate = managementRate / 100\nIf unit = 'months/year': effective monthly rate = managementRate / 12\nEquivalence: X months/year = (X × 100 / 12) % per month",
+    note: "The management fee can be entered either as a percentage of monthly rent or as months of rent per year. The two are equivalent: 1 month/year ≈ 8.33%/mo, 1.5 months/year ≈ 12.5%/mo. All downstream calculations use the % form.",
   },
   {
     title: "Tenant Search Fee (Agency)",

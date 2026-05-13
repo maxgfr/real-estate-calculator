@@ -20,6 +20,7 @@ import {
   getOnePercentRule,
   getOER,
   getTenantSearchFeeMonthly,
+  getEffectiveManagementRatePercent,
 } from './index';
 
 describe('getMonthlyMortgagePayment', () => {
@@ -666,6 +667,49 @@ describe('computeExitScenario with tenant search fee', () => {
     expect(negative).not.toBeNull();
     if (!explicit || !negative) return;
     expect(negative.cumulativeCashflow).toBe(explicit.cumulativeCashflow);
+  });
+});
+
+describe('getEffectiveManagementRatePercent', () => {
+  it('defaults to percent unit and returns the value as-is', () => {
+    expect(getEffectiveManagementRatePercent(8)).toBe(8);
+    expect(getEffectiveManagementRatePercent('10')).toBe(10);
+  });
+
+  it('returns value as-is when unit is explicitly "percent"', () => {
+    expect(getEffectiveManagementRatePercent(8, 'percent')).toBe(8);
+    expect(getEffectiveManagementRatePercent('10', 'percent')).toBe(10);
+  });
+
+  it('converts months/year to monthly percent', () => {
+    // 1 month/year = (1 × 100) / 12 = 8.33%/mo
+    expect(getEffectiveManagementRatePercent(1, 'monthsPerYear')).toBeCloseTo(8.333, 3);
+    // 1.2 months/year = 10%/mo
+    expect(getEffectiveManagementRatePercent(1.2, 'monthsPerYear')).toBeCloseTo(10, 5);
+    // 1.5 months/year = 12.5%/mo
+    expect(getEffectiveManagementRatePercent(1.5, 'monthsPerYear')).toBeCloseTo(12.5, 5);
+    // 0.96 months/year ≈ 8% (the inverse used by the UI toggle)
+    expect(getEffectiveManagementRatePercent(0.96, 'monthsPerYear')).toBeCloseTo(8, 2);
+  });
+
+  it('returns 0 for zero, negative, or non-finite inputs', () => {
+    expect(getEffectiveManagementRatePercent(0)).toBe(0);
+    expect(getEffectiveManagementRatePercent(-5)).toBe(0);
+    expect(getEffectiveManagementRatePercent('invalid')).toBe(0);
+    expect(getEffectiveManagementRatePercent(Infinity)).toBe(0);
+  });
+
+  it('falls back to percent for unknown unit strings', () => {
+    // Defensive: stale URL params shouldn't break calculations.
+    expect(getEffectiveManagementRatePercent(8, 'foo')).toBe(8);
+  });
+
+  it('round-trips % → months/year → % cleanly', () => {
+    for (const pct of [1, 5, 8, 10, 12, 15]) {
+      const months = (pct * 12) / 100;
+      const back = getEffectiveManagementRatePercent(months, 'monthsPerYear');
+      expect(back).toBeCloseTo(pct, 5);
+    }
   });
 });
 
