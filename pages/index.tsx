@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/router";
 import * as XLSX from "xlsx";
 import { buildExportSheets } from "../utils/export";
+import { parseStateFromQuery, serializeStateToQuery } from "../utils/state";
 
 const Charts = dynamic(() => import("../components/Charts"), { ssr: false });
 import {
@@ -77,6 +78,8 @@ type Key =
   | "rentIncreaseRate"
   | "expenseInflationRate"
   | "capexRate"
+  | "tenantSearchFeeMonths"
+  | "tenancyDurationYears"
   | "exitYear";
 
 type Field = {
@@ -120,6 +123,8 @@ const sections: Section[] = [
       { key: "propertyTax", name: "Annual property tax", step: 100, placeholder: "e.g. 1,000", min: 0, tooltip: "Annual property tax (taxe foncière). Increases with expense inflation rate in long-term projections." },
       { key: "monthlyCosts", name: "Monthly fixed costs (charges, insurance, maintenance...)", step: 50, placeholder: "e.g. 150", min: 0, tooltip: "Fixed monthly charges: building fees (copropriété), landlord insurance (PNO), routine maintenance budget. These increase yearly with the expense inflation rate." },
       { key: "managementRate", name: "Management fees (% of rent)", step: 1, placeholder: "e.g. 8", min: 0, max: 100, tooltip: "Property management company fees, calculated as a percentage of effective rent (after vacancy). Typical: 6-10%. Set to 0 if you self-manage." },
+      { key: "tenantSearchFeeMonths", name: "Tenant search fee (months of rent)", step: 0.1, placeholder: "e.g. 1", min: 0, max: 6, tooltip: "Agency fee for finding a new tenant, expressed in months of rent. Typical in France: 1 month when managed by an agency (sometimes 1.2 or 1.5 in expensive markets). The cost is amortized over the average tenancy duration. Set to 0 if you self-manage or if there is no tenant search fee." },
+      { key: "tenancyDurationYears", name: "Avg. tenancy duration (years)", step: 0.5, placeholder: "e.g. 3", min: 0.5, max: 30, tooltip: "Average length of a tenancy. Used to amortize the tenant search fee. Default 3 years matches typical residential tenancies in France. Longer tenancies dilute the agency fee impact." },
       { key: "capexRate", name: "CapEx reserve (% of gross rent)", step: 1, placeholder: "e.g. 5", min: 0, max: 50, tooltip: "Capital Expenditure reserve for major repairs and replacements (roof, boiler, plumbing, appliances). Set aside monthly as % of gross rent. Industry standard: 5-10%. Not a real expense today but a provision for future large costs." },
       { key: "vacancyRate", name: "Vacancy rate (%)", step: 1, placeholder: "e.g. 5", min: 0, max: 100, tooltip: "Percentage of time the property is vacant (no tenant). 5% ≈ 18 days/year. Reduces effective income. Typical: 3-8% depending on market." },
       { key: "rentIncreaseRate", name: "Annual rent increase (%)", step: 0.5, placeholder: "e.g. 1.5", min: -10, max: 20, tooltip: "Expected annual rent increase. Tied to inflation index (IRL in France). Applied in all long-term projections. Typical: 1-3%." },
@@ -180,6 +185,8 @@ const defaultState: State = {
   rentIncreaseRate: 1.5,
   expenseInflationRate: 2,
   capexRate: 3,
+  tenantSearchFeeMonths: 0,
+  tenancyDurationYears: 3,
   exitYear: 25,
 };
 
@@ -218,7 +225,7 @@ const Home: NextPage = () => {
   // Sync state from URL when query params are present
   useEffect(() => {
     if (Object.keys(router.query).length > 0) {
-      setState({ ...defaultState, ...(router.query as unknown as State) });
+      setState(parseStateFromQuery(router.query, defaultState));
       const urlCurrency = router.query.currency as string | undefined;
       if (urlCurrency && CURRENCIES.some((c) => c.code === urlCurrency)) {
         setCurrency(urlCurrency as Currency);
@@ -231,7 +238,7 @@ const Home: NextPage = () => {
     if (!router.isReady) return;
     if (Object.keys(router.query).length === 0) {
       void router.replace(
-        { query: { ...defaultState, currency: "EUR" } as unknown as Record<string, string> },
+        { query: { ...serializeStateToQuery(defaultState), currency: "EUR" } },
         undefined,
         { shallow: true }
       );
@@ -295,9 +302,15 @@ const Home: NextPage = () => {
     const effectiveRent = Number(state.rent) * (1 - Number(state.vacancyRate) / 100);
     const managementFees = effectiveRent * (Number(state.managementRate) / 100);
     const capex = Number(state.rent) * Number(state.capexRate) / 100;
-    const net = effectiveRent - Number(state.monthlyCosts) - Number(state.propertyTax) / 12 - managementFees - capex;
+    const tsfMonths = Number(state.tenantSearchFeeMonths);
+    const tsfYears = Number(state.tenancyDurationYears);
+    const tenantSearchFee =
+      tsfMonths > 0 && tsfYears > 0
+        ? (tsfMonths * Number(state.rent)) / (tsfYears * 12)
+        : 0;
+    const net = effectiveRent - Number(state.monthlyCosts) - Number(state.propertyTax) / 12 - managementFees - capex - tenantSearchFee;
     return isNaN(net) ? 0 : net;
-  }, [state.rent, state.monthlyCosts, state.propertyTax, state.managementRate, state.vacancyRate, state.capexRate]);
+  }, [state.rent, state.monthlyCosts, state.propertyTax, state.managementRate, state.vacancyRate, state.capexRate, state.tenantSearchFeeMonths, state.tenancyDurationYears]);
 
   // Rounded string for display only
   const netMonthlyIncome = useMemo(
@@ -338,8 +351,8 @@ const Home: NextPage = () => {
   );
 
   const breakEvenRent = useMemo(
-    () => getBreakEvenRent(state.monthlyCosts, state.propertyTax, monthlyMortgageExact, state.vacancyRate, state.managementRate, state.capexRate),
-    [state.monthlyCosts, state.propertyTax, monthlyMortgageExact, state.vacancyRate, state.managementRate, state.capexRate]
+    () => getBreakEvenRent(state.monthlyCosts, state.propertyTax, monthlyMortgageExact, state.vacancyRate, state.managementRate, state.capexRate, 0, state.tenantSearchFeeMonths, state.tenancyDurationYears),
+    [state.monthlyCosts, state.propertyTax, monthlyMortgageExact, state.vacancyRate, state.managementRate, state.capexRate, state.tenantSearchFeeMonths, state.tenancyDurationYears]
   );
 
   const ltv = useMemo(
@@ -359,12 +372,19 @@ const Home: NextPage = () => {
 
   // NOI = Effective rent - operating expenses (before debt service and CapEx reserve)
   // CapEx is a capital reserve, not an operating expense — excluded from NOI per industry standard
+  // Tenant search fee is an operating expense (recurring agency cost) — included in NOI
   const noi = useMemo(() => {
     const effectiveRent = Number(state.rent) * (1 - Number(state.vacancyRate) / 100);
     const mgmtFees = effectiveRent * (Number(state.managementRate) / 100);
-    const monthlyNOI = effectiveRent - mgmtFees - Number(state.monthlyCosts) - Number(state.propertyTax) / 12;
+    const tsfMonths = Number(state.tenantSearchFeeMonths);
+    const tsfYears = Number(state.tenancyDurationYears);
+    const tenantSearchFee =
+      tsfMonths > 0 && tsfYears > 0
+        ? (tsfMonths * Number(state.rent)) / (tsfYears * 12)
+        : 0;
+    const monthlyNOI = effectiveRent - mgmtFees - tenantSearchFee - Number(state.monthlyCosts) - Number(state.propertyTax) / 12;
     return String(monthlyNOI * 12);
-  }, [state.rent, state.vacancyRate, state.managementRate, state.monthlyCosts, state.propertyTax]);
+  }, [state.rent, state.vacancyRate, state.managementRate, state.monthlyCosts, state.propertyTax, state.tenantSearchFeeMonths, state.tenancyDurationYears]);
 
   // Cap Rate = NOI / Property Value (purchase + renovation)
   const capRate = useMemo(
@@ -400,6 +420,10 @@ const Home: NextPage = () => {
     const inflRate = Number(state.expenseInflationRate);
     const mgmtRate = Number(state.managementRate);
     const capex = Number(state.capexRate);
+    const tsfMonths = Number(state.tenantSearchFeeMonths);
+    const tsfYears = Number(state.tenancyDurationYears);
+    const tsfFactor =
+      tsfMonths > 0 && tsfYears > 0 ? tsfMonths / (tsfYears * 12) : 0;
 
     if (period <= 0 || isNaN(base)) return null;
 
@@ -413,9 +437,10 @@ const Home: NextPage = () => {
     const effectiveRentAfter = rentAtEnd * (1 - vacancy / 100);
     const mgmtFees = effectiveRentAfter * (mgmtRate / 100);
     const capexAfter = rentAtEnd * (capex / 100);
+    const tenantSearchFeeAfter = rentAtEnd * tsfFactor;
     const inflatedCosts = costs * Math.pow(1 + inflRate / 100, period);
     const inflatedTax = tax * Math.pow(1 + inflRate / 100, period);
-    const cashflowAfterLoan = Math.round(effectiveRentAfter - mgmtFees - capexAfter - inflatedCosts - inflatedTax / 12);
+    const cashflowAfterLoan = Math.round(effectiveRentAfter - mgmtFees - capexAfter - tenantSearchFeeAfter - inflatedCosts - inflatedTax / 12);
 
     // Cumulative cashflow over extended horizon (beyond loan to find breakeven)
     const horizon = Math.min(period + 10, 40);
@@ -427,9 +452,10 @@ const Home: NextPage = () => {
       const eff = r * (1 - vacancy / 100);
       const mgmt = eff * (mgmtRate / 100);
       const cx = r * (capex / 100);
+      const tsf = r * tsfFactor;
       const ic = costs * Math.pow(1 + inflRate / 100, y - 1);
       const it = tax * Math.pow(1 + inflRate / 100, y - 1);
-      const net = eff - mgmt - cx - ic - it / 12;
+      const net = eff - mgmt - cx - tsf - ic - it / 12;
       const mortgage = y <= period ? monthlyMortgageExact : 0;
       const prevCF = cumulativeCF;
       cumulativeCF += (net - mortgage) * 12;
@@ -445,9 +471,10 @@ const Home: NextPage = () => {
       const eff = r * (1 - vacancy / 100);
       const mgmt = eff * (mgmtRate / 100);
       const cx = r * (capex / 100);
+      const tsf = r * tsfFactor;
       const ic = costs * Math.pow(1 + inflRate / 100, y - 1);
       const it = tax * Math.pow(1 + inflRate / 100, y - 1);
-      const net = eff - mgmt - cx - ic - it / 12;
+      const net = eff - mgmt - cx - tsf - ic - it / 12;
       cumulativeCFAtLoanEnd += (net - monthlyMortgageExact) * 12;
     }
 
@@ -465,7 +492,7 @@ const Home: NextPage = () => {
       hasRentIncrease: rentRate !== 0,
       period,
     };
-  }, [state.bankLoanPeriod, state.appreciationRate, state.rentIncreaseRate, state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, state.expenseInflationRate, state.managementRate, state.capexRate, monthlyMortgageExact, downPayment, state.housingPrice, state.houseWorks]);
+  }, [state.bankLoanPeriod, state.appreciationRate, state.rentIncreaseRate, state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, state.expenseInflationRate, state.managementRate, state.capexRate, state.tenantSearchFeeMonths, state.tenancyDurationYears, monthlyMortgageExact, downPayment, state.housingPrice, state.houseWorks]);
 
   const exitScenario = useMemo(() => {
     return computeExitScenario(
@@ -474,9 +501,10 @@ const Home: NextPage = () => {
       Number(state.bankLoanPeriod), monthlyMortgageExact, Number(downPayment),
       Number(state.rent), Number(state.monthlyCosts), Number(state.propertyTax),
       Number(state.vacancyRate), Number(state.managementRate), Number(state.rentIncreaseRate),
-      Number(state.expenseInflationRate), Number(state.capexRate)
+      Number(state.expenseInflationRate), Number(state.capexRate),
+      Number(state.tenantSearchFeeMonths), Number(state.tenancyDurationYears)
     );
-  }, [state.exitYear, state.housingPrice, state.houseWorks, state.appreciationRate, state.bankLoan, state.bankRate, state.bankLoanPeriod, monthlyMortgageExact, downPayment, state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, state.managementRate, state.rentIncreaseRate, state.expenseInflationRate, state.capexRate]);
+  }, [state.exitYear, state.housingPrice, state.houseWorks, state.appreciationRate, state.bankLoan, state.bankRate, state.bankLoanPeriod, monthlyMortgageExact, downPayment, state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, state.managementRate, state.rentIncreaseRate, state.expenseInflationRate, state.capexRate, state.tenantSearchFeeMonths, state.tenancyDurationYears]);
 
   const stressScenarios = useMemo(() => {
     const base = Number(state.housingPrice) + Number(state.houseWorks);
@@ -484,15 +512,16 @@ const Home: NextPage = () => {
       Number(state.rent), Number(state.monthlyCosts), Number(state.propertyTax),
       Number(state.vacancyRate), monthlyMortgageExact, Number(state.rentIncreaseRate),
       Number(state.bankLoanPeriod), Number(state.expenseInflationRate), Number(state.managementRate),
-      Number(state.capexRate), Number(downPayment), base, Number(state.appreciationRate)
+      Number(state.capexRate), Number(downPayment), base, Number(state.appreciationRate),
+      Number(state.tenantSearchFeeMonths), Number(state.tenancyDurationYears)
     );
-  }, [state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, monthlyMortgageExact, state.rentIncreaseRate, state.bankLoanPeriod, state.expenseInflationRate, state.managementRate, state.capexRate, downPayment, state.housingPrice, state.houseWorks, state.appreciationRate]);
+  }, [state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, monthlyMortgageExact, state.rentIncreaseRate, state.bankLoanPeriod, state.expenseInflationRate, state.managementRate, state.capexRate, downPayment, state.housingPrice, state.houseWorks, state.appreciationRate, state.tenantSearchFeeMonths, state.tenancyDurationYears]);
 
   const onReset = () => {
     setState(defaultState);
     setCurrency("EUR");
     void router.replace(
-      { query: { ...defaultState, currency: "EUR" } as unknown as Record<string, string> },
+      { query: { ...serializeStateToQuery(defaultState), currency: "EUR" } },
       undefined,
       { shallow: true }
     );
@@ -518,6 +547,8 @@ const Home: NextPage = () => {
         rentIncreaseRate: Number(state.rentIncreaseRate),
         expenseInflationRate: Number(state.expenseInflationRate),
         capexRate: Number(state.capexRate),
+        tenantSearchFeeMonths: Number(state.tenantSearchFeeMonths),
+        tenancyDurationYears: Number(state.tenancyDurationYears),
         exitYear: Number(state.exitYear),
       },
       {
@@ -1072,6 +1103,8 @@ const Home: NextPage = () => {
         expenseInflationRate={Number(state.expenseInflationRate)}
         managementRate={Number(state.managementRate)}
         capexRate={Number(state.capexRate)}
+        tenantSearchFeeMonths={Number(state.tenantSearchFeeMonths)}
+        tenancyDurationYears={Number(state.tenancyDurationYears)}
         exitYear={Number(state.exitYear)}
         dscr={dscr === '∞' ? Infinity : Number(dscr)}
         grm={Number(grm)}
@@ -1161,7 +1194,7 @@ const formulas = [
   },
   {
     title: "Net Monthly Income",
-    formula: "Effective rent = Monthly rent x (1 - Vacancy rate / 100)\nManagement fees = Effective rent x (Management rate / 100)\nCapEx = Monthly rent x (CapEx rate / 100)\nNet income = Effective rent - Management fees - CapEx - Monthly fixed costs - Property tax / 12",
+    formula: "Effective rent = Monthly rent x (1 - Vacancy rate / 100)\nManagement fees = Effective rent x (Management rate / 100)\nCapEx = Monthly rent x (CapEx rate / 100)\nTenant search fee = (Months x Monthly rent) / (Tenancy duration x 12)\nNet income = Effective rent - Management fees - CapEx - Tenant search fee - Monthly fixed costs - Property tax / 12",
   },
   {
     title: "Monthly Cashflow",
@@ -1236,6 +1269,11 @@ const formulas = [
     title: "CapEx Reserve",
     formula: "CapEx (monthly) = Monthly gross rent x CapEx rate / 100",
     note: "Capital expenditure reserve for major repairs (roof, HVAC, etc.). Deducted from net income. Scales with rent since it's a percentage of gross rent.",
+  },
+  {
+    title: "Tenant Search Fee (Agency)",
+    formula: "Monthly fee = (Tenant search fee months x Monthly rent) / (Avg. tenancy duration years x 12)",
+    note: "Agency fee for finding a new tenant, in months of rent (typically 1 month when managed by an agency, can be 1.2 or 1.5 in expensive markets). The one-off cost is amortized over the average tenancy duration to give a smooth monthly impact. Set to 0 if you self-manage.",
   },
   {
     title: "Cap Rate",

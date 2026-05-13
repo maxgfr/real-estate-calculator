@@ -49,6 +49,8 @@ type ChartsProps = {
   expenseInflationRate: number;
   managementRate: number;
   capexRate: number;
+  tenantSearchFeeMonths: number;
+  tenancyDurationYears: number;
   exitYear: number;
   dscr: number;
   grm: number;
@@ -186,6 +188,17 @@ function computeEquityBuildUp(
   return data;
 }
 
+// Tenant search fee factor: X months / (D years × 12).
+// Multiplied by monthly rent to get the per-month amortized agency fee.
+export function tenantSearchFeeFactor(
+  tenantSearchFeeMonths: number,
+  tenancyDurationYears: number
+): number {
+  if (tenantSearchFeeMonths <= 0 || tenancyDurationYears <= 0) return 0;
+  if (!isFinite(tenantSearchFeeMonths) || !isFinite(tenancyDurationYears)) return 0;
+  return tenantSearchFeeMonths / (tenancyDurationYears * 12);
+}
+
 export function computeCumulativeCashflow(
   downPayment: number,
   monthlyRent: number,
@@ -197,13 +210,16 @@ export function computeCumulativeCashflow(
   loanPeriod: number,
   expenseInflationRate: number = 0,
   managementRate: number = 0,
-  capexRate: number = 0
+  capexRate: number = 0,
+  tenantSearchFeeMonths: number = 0,
+  tenancyDurationYears: number = 3
 ) {
   const data: { year: number; cumulative: number }[] = [];
   if (loanPeriod <= 0) return data;
 
   // Show 10 years beyond loan end (capped at 40) to reveal the recovery period
   const horizon = Math.min(loanPeriod + 10, 40);
+  const tsfFactor = tenantSearchFeeFactor(tenantSearchFeeMonths, tenancyDurationYears);
   let cumulative = -downPayment;
   data.push({ year: 0, cumulative: Math.round(cumulative) });
 
@@ -214,7 +230,8 @@ export function computeCumulativeCashflow(
     const inflatedCosts = monthlyCosts * Math.pow(1 + expenseInflationRate / 100, y - 1);
     const inflatedTax = annualPropertyTax * Math.pow(1 + expenseInflationRate / 100, y - 1);
     const capex = rent * (capexRate / 100);
-    const netIncome = effectiveRent - managementFees - capex - inflatedCosts - inflatedTax / 12;
+    const tenantSearchFee = rent * tsfFactor;
+    const netIncome = effectiveRent - managementFees - capex - tenantSearchFee - inflatedCosts - inflatedTax / 12;
     // After the loan is paid off, no more mortgage payments
     const mortgage = y <= loanPeriod ? monthlyMortgage : 0;
     const cashflow = netIncome - mortgage;
@@ -232,17 +249,21 @@ function computeRentSensitivity(
   monthlyMortgage: number,
   totalPrice: number,
   managementRate: number = 0,
-  capexRate: number = 0
+  capexRate: number = 0,
+  tenantSearchFeeMonths: number = 0,
+  tenancyDurationYears: number = 3
 ) {
   const data: { label: string; cashflow: number; netYield: number }[] = [];
   if (baseRent <= 0 || totalPrice <= 0) return data;
 
+  const tsfFactor = tenantSearchFeeFactor(tenantSearchFeeMonths, tenancyDurationYears);
   for (let pct = -20; pct <= 20; pct += 5) {
     const rent = baseRent * (1 + pct / 100);
     const effectiveRent = rent * (1 - vacancyRate / 100);
     const managementFees = effectiveRent * (managementRate / 100);
     const capex = rent * (capexRate / 100);
-    const netIncome = effectiveRent - managementFees - capex - monthlyCosts - annualPropertyTax / 12;
+    const tenantSearchFee = rent * tsfFactor;
+    const netIncome = effectiveRent - managementFees - capex - tenantSearchFee - monthlyCosts - annualPropertyTax / 12;
     const cashflow = netIncome - monthlyMortgage;
     const netYield = ((netIncome * 12) / totalPrice) * 100;
 
@@ -265,11 +286,14 @@ export function computeAnnualCashflow(
   loanPeriod: number,
   expenseInflationRate: number = 0,
   managementRate: number = 0,
-  capexRate: number = 0
+  capexRate: number = 0,
+  tenantSearchFeeMonths: number = 0,
+  tenancyDurationYears: number = 3
 ) {
   const data: { year: number; cashflow: number }[] = [];
   if (loanPeriod <= 0) return data;
   const horizon = Math.min(loanPeriod + 10, 40);
+  const tsfFactor = tenantSearchFeeFactor(tenantSearchFeeMonths, tenancyDurationYears);
   for (let y = 1; y <= horizon; y++) {
     const rent = monthlyRent * Math.pow(1 + rentIncreaseRate / 100, y - 1);
     const effectiveRent = rent * (1 - vacancyRate / 100);
@@ -277,7 +301,8 @@ export function computeAnnualCashflow(
     const inflatedCosts = monthlyCosts * Math.pow(1 + expenseInflationRate / 100, y - 1);
     const inflatedTax = annualPropertyTax * Math.pow(1 + expenseInflationRate / 100, y - 1);
     const capex = rent * (capexRate / 100);
-    const netIncome = effectiveRent - managementFees - capex - inflatedCosts - inflatedTax / 12;
+    const tenantSearchFee = rent * tsfFactor;
+    const netIncome = effectiveRent - managementFees - capex - tenantSearchFee - inflatedCosts - inflatedTax / 12;
     const mortgage = y <= loanPeriod ? monthlyMortgage : 0;
     const cashflow = (netIncome - mortgage) * 12;
     data.push({ year: y, cashflow: Math.round(cashflow) });
@@ -295,11 +320,14 @@ function computeIncomeVsExpenses(
   loanPeriod: number,
   expenseInflationRate: number = 0,
   managementRate: number = 0,
-  capexRate: number = 0
+  capexRate: number = 0,
+  tenantSearchFeeMonths: number = 0,
+  tenancyDurationYears: number = 3
 ) {
   const data: { year: number; income: number; totalExpenses: number }[] = [];
   if (loanPeriod <= 0) return data;
   const horizon = Math.min(loanPeriod + 10, 40);
+  const tsfFactor = tenantSearchFeeFactor(tenantSearchFeeMonths, tenancyDurationYears);
   for (let y = 1; y <= horizon; y++) {
     const rent = monthlyRent * Math.pow(1 + rentIncreaseRate / 100, y - 1);
     const effectiveRent = rent * (1 - vacancyRate / 100);
@@ -309,7 +337,8 @@ function computeIncomeVsExpenses(
     const inflatedTax = annualPropertyTax * Math.pow(1 + expenseInflationRate / 100, y - 1);
     const managementFees = effectiveRent * (managementRate / 100);
     const capex = rent * (capexRate / 100);
-    const totalExpenses = mortgage + (inflatedCosts + managementFees + capex) * 12 + inflatedTax;
+    const tenantSearchFee = rent * tsfFactor;
+    const totalExpenses = mortgage + (inflatedCosts + managementFees + capex + tenantSearchFee) * 12 + inflatedTax;
     data.push({
       year: y,
       income: Math.round(income),
@@ -334,12 +363,15 @@ export function computeTotalReturn(
   appreciationRate: number,
   expenseInflationRate: number = 0,
   managementRate: number = 0,
-  capexRate: number = 0
+  capexRate: number = 0,
+  tenantSearchFeeMonths: number = 0,
+  tenancyDurationYears: number = 3
 ) {
   const data: { year: number; cumulativeCashflow: number; equity: number; totalReturn: number }[] = [];
   if (loanPeriod <= 0) return data;
 
   const horizon = Math.min(loanPeriod + 10, 40);
+  const tsfFactor = tenantSearchFeeFactor(tenantSearchFeeMonths, tenancyDurationYears);
   let cumulativeCF = -downPayment;
   let balance = loanAmount;
   const monthlyRate = annualRate / 100 / 12;
@@ -355,7 +387,8 @@ export function computeTotalReturn(
       const inflatedCosts = monthlyCosts * Math.pow(1 + expenseInflationRate / 100, y - 1);
       const inflatedTax = annualPropertyTax * Math.pow(1 + expenseInflationRate / 100, y - 1);
       const capex = rent * (capexRate / 100);
-      const netIncome = effectiveRent - managementFees - capex - inflatedCosts - inflatedTax / 12;
+      const tenantSearchFee = rent * tsfFactor;
+      const netIncome = effectiveRent - managementFees - capex - tenantSearchFee - inflatedCosts - inflatedTax / 12;
       const mortgage = y <= loanPeriod ? monthlyMortgage : 0;
       cumulativeCF += (netIncome - mortgage) * 12;
     }
@@ -391,11 +424,14 @@ export function computeExpenseDecomposition(
   loanPeriod: number,
   expenseInflationRate: number = 0,
   managementRate: number = 0,
-  capexRate: number = 0
+  capexRate: number = 0,
+  tenantSearchFeeMonths: number = 0,
+  tenancyDurationYears: number = 3
 ) {
-  const data: { year: number; fixedCosts: number; propertyTax: number; managementFees: number; capex: number; income: number }[] = [];
+  const data: { year: number; fixedCosts: number; propertyTax: number; managementFees: number; capex: number; tenantSearchFee: number; income: number }[] = [];
   if (loanPeriod <= 0) return data;
   const horizon = Math.min(loanPeriod + 10, 40);
+  const tsfFactor = tenantSearchFeeFactor(tenantSearchFeeMonths, tenancyDurationYears);
   for (let y = 1; y <= horizon; y++) {
     const rent = monthlyRent * Math.pow(1 + rentIncreaseRate / 100, y - 1);
     const effectiveRent = rent * (1 - vacancyRate / 100);
@@ -403,6 +439,7 @@ export function computeExpenseDecomposition(
     const propertyTax = annualPropertyTax * Math.pow(1 + expenseInflationRate / 100, y - 1);
     const managementFees = effectiveRent * (managementRate / 100) * 12;
     const capex = rent * (capexRate / 100) * 12;
+    const tenantSearchFee = rent * tsfFactor * 12;
     const income = effectiveRent * 12;
     data.push({
       year: y,
@@ -410,6 +447,7 @@ export function computeExpenseDecomposition(
       propertyTax: Math.round(propertyTax),
       managementFees: Math.round(managementFees),
       capex: Math.round(capex),
+      tenantSearchFee: Math.round(tenantSearchFee),
       income: Math.round(income),
     });
   }
@@ -434,7 +472,9 @@ export function computeROIByExitYear(
   managementRate: number,
   rentIncreaseRate: number,
   expenseInflationRate: number,
-  capexRate: number = 0
+  capexRate: number = 0,
+  tenantSearchFeeMonths: number = 0,
+  tenancyDurationYears: number = 3
 ) {
   const data: { year: number; roi: number }[] = [];
   if (downPayment === 0) return data;
@@ -443,7 +483,8 @@ export function computeROIByExitYear(
     const result = computeExitScenario(
       y, housingPrice, houseWorks, appreciationRate, loanAmount, bankRate, bankLoanPeriod,
       monthlyMortgage, downPayment, monthlyRent, monthlyCosts, annualPropertyTax,
-      vacancyRate, managementRate, rentIncreaseRate, expenseInflationRate, capexRate
+      vacancyRate, managementRate, rentIncreaseRate, expenseInflationRate, capexRate,
+      tenantSearchFeeMonths, tenancyDurationYears
     );
     if (result) {
       data.push({ year: y, roi: Number(result.annualizedRoi === 'N/A' ? '0' : result.annualizedRoi) });
@@ -461,13 +502,16 @@ function computeWaterfallData(
   capexRate: number,
   monthlyCosts: number,
   annualPropertyTax: number,
-  monthlyMortgage: number
+  monthlyMortgage: number,
+  tenantSearchFeeMonths: number = 0,
+  tenancyDurationYears: number = 3
 ) {
   const grossRent = monthlyRent;
   const vacancyLoss = grossRent * (vacancyRate / 100);
   const effectiveRent = grossRent - vacancyLoss;
   const mgmtFees = effectiveRent * (managementRate / 100);
   const capex = grossRent * (capexRate / 100);
+  const tenantSearchFee = grossRent * tenantSearchFeeFactor(tenantSearchFeeMonths, tenancyDurationYears);
   const fixedCosts = monthlyCosts;
   const tax = annualPropertyTax / 12;
   const mortgage = monthlyMortgage;
@@ -484,6 +528,10 @@ function computeWaterfallData(
   if (mgmtFees > 0) {
     items.push({ name: "Management", start: running - mgmtFees, end: running, value: -mgmtFees });
     running -= mgmtFees;
+  }
+  if (tenantSearchFee > 0) {
+    items.push({ name: "Tenant search", start: running - tenantSearchFee, end: running, value: -tenantSearchFee });
+    running -= tenantSearchFee;
   }
   if (capex > 0) {
     items.push({ name: "CapEx", start: running - capex, end: running, value: -capex });
@@ -526,11 +574,14 @@ function computeRateSensitivity(
   capexRate: number,
   loanAmount: number,
   bankRate: number,
-  bankLoanPeriod: number
+  bankLoanPeriod: number,
+  tenantSearchFeeMonths: number = 0,
+  tenancyDurationYears: number = 3
 ) {
   const data: { label: string; cashflow: number; dscr: number }[] = [];
   if (loanAmount <= 0 || bankLoanPeriod <= 0) return data;
 
+  const tsfFactor = tenantSearchFeeFactor(tenantSearchFeeMonths, tenancyDurationYears);
   const variations = [-2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2];
   for (const delta of variations) {
     const rate = Math.max(0, bankRate + delta);
@@ -546,7 +597,8 @@ function computeRateSensitivity(
     const effectiveRent = monthlyRent * (1 - vacancyRate / 100);
     const mgmtFees = effectiveRent * (managementRate / 100);
     const capex = monthlyRent * (capexRate / 100);
-    const netIncome = effectiveRent - mgmtFees - capex - monthlyCosts - annualPropertyTax / 12;
+    const tenantSearchFee = monthlyRent * tsfFactor;
+    const netIncome = effectiveRent - mgmtFees - capex - tenantSearchFee - monthlyCosts - annualPropertyTax / 12;
     const cashflow = netIncome - payment;
     const dscr = payment === 0 ? 0 : netIncome / payment;
 
@@ -648,6 +700,8 @@ export default function Charts(props: ChartsProps) {
     expenseInflationRate,
     managementRate,
     capexRate,
+    tenantSearchFeeMonths,
+    tenancyDurationYears,
     exitYear,
     dscr,
     grm,
@@ -692,15 +746,17 @@ export default function Charts(props: ChartsProps) {
     const vacancyLoss = monthlyRent * (vacancyRate / 100);
     const mgmtFees = effectiveRent * (managementRate / 100);
     const capexReserve = monthlyRent * (capexRate / 100);
+    const tenantSearchFee = monthlyRent * tenantSearchFeeFactor(tenantSearchFeeMonths, tenancyDurationYears);
     return [
       { name: "Mortgage", value: Math.round(monthlyMortgage) },
       { name: "Charges", value: Math.round(monthlyCosts) },
       { name: "Property tax", value: Math.round(annualPropertyTax / 12) },
       ...(mgmtFees > 0 ? [{ name: "Management fees", value: Math.round(mgmtFees) }] : []),
+      ...(tenantSearchFee > 0 ? [{ name: "Tenant search fee", value: Math.round(tenantSearchFee) }] : []),
       ...(capexReserve > 0 ? [{ name: "CapEx reserve", value: Math.round(capexReserve) }] : []),
       ...(vacancyLoss > 0 ? [{ name: "Vacancy loss", value: Math.round(vacancyLoss) }] : []),
     ].filter((d) => d.value > 0);
-  }, [monthlyMortgage, monthlyCosts, annualPropertyTax, monthlyRent, vacancyRate, managementRate, capexRate]);
+  }, [monthlyMortgage, monthlyCosts, annualPropertyTax, monthlyRent, vacancyRate, managementRate, capexRate, tenantSearchFeeMonths, tenancyDurationYears]);
 
   const yieldData = useMemo(
     () => [
@@ -749,9 +805,11 @@ export default function Charts(props: ChartsProps) {
         bankLoanPeriod,
         expenseInflationRate,
         managementRate,
-        capexRate
+        capexRate,
+        tenantSearchFeeMonths,
+        tenancyDurationYears
       ),
-    [downPayment, monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, rentIncreaseRate, bankLoanPeriod, expenseInflationRate, managementRate, capexRate]
+    [downPayment, monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, rentIncreaseRate, bankLoanPeriod, expenseInflationRate, managementRate, capexRate, tenantSearchFeeMonths, tenancyDurationYears]
   );
 
   const rentSensitivityData = useMemo(
@@ -764,9 +822,11 @@ export default function Charts(props: ChartsProps) {
         monthlyMortgage,
         totalPrice,
         managementRate,
-        capexRate
+        capexRate,
+        tenantSearchFeeMonths,
+        tenancyDurationYears
       ),
-    [monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, totalPrice, managementRate, capexRate]
+    [monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, totalPrice, managementRate, capexRate, tenantSearchFeeMonths, tenancyDurationYears]
   );
 
   const annualCashflowData = useMemo(
@@ -781,9 +841,11 @@ export default function Charts(props: ChartsProps) {
         bankLoanPeriod,
         expenseInflationRate,
         managementRate,
-        capexRate
+        capexRate,
+        tenantSearchFeeMonths,
+        tenancyDurationYears
       ),
-    [monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, rentIncreaseRate, bankLoanPeriod, expenseInflationRate, managementRate, capexRate]
+    [monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, rentIncreaseRate, bankLoanPeriod, expenseInflationRate, managementRate, capexRate, tenantSearchFeeMonths, tenancyDurationYears]
   );
 
   const incomeVsExpensesData = useMemo(
@@ -798,9 +860,11 @@ export default function Charts(props: ChartsProps) {
         bankLoanPeriod,
         expenseInflationRate,
         managementRate,
-        capexRate
+        capexRate,
+        tenantSearchFeeMonths,
+        tenancyDurationYears
       ),
-    [monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, rentIncreaseRate, bankLoanPeriod, expenseInflationRate, managementRate, capexRate]
+    [monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, rentIncreaseRate, bankLoanPeriod, expenseInflationRate, managementRate, capexRate, tenantSearchFeeMonths, tenancyDurationYears]
   );
 
   const totalReturnData = useMemo(
@@ -820,15 +884,17 @@ export default function Charts(props: ChartsProps) {
         appreciationRate,
         expenseInflationRate,
         managementRate,
-        capexRate
+        capexRate,
+        tenantSearchFeeMonths,
+        tenancyDurationYears
       ),
-    [downPayment, monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, rentIncreaseRate, bankLoanPeriod, loanAmount, bankRate, propertyBaseValue, appreciationRate, expenseInflationRate, managementRate, capexRate]
+    [downPayment, monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, rentIncreaseRate, bankLoanPeriod, loanAmount, bankRate, propertyBaseValue, appreciationRate, expenseInflationRate, managementRate, capexRate, tenantSearchFeeMonths, tenancyDurationYears]
   );
 
   // Expense decomposition data
   const expenseDecompositionData = useMemo(
-    () => computeExpenseDecomposition(monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, rentIncreaseRate, bankLoanPeriod, expenseInflationRate, managementRate, capexRate),
-    [monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, rentIncreaseRate, bankLoanPeriod, expenseInflationRate, managementRate, capexRate]
+    () => computeExpenseDecomposition(monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, rentIncreaseRate, bankLoanPeriod, expenseInflationRate, managementRate, capexRate, tenantSearchFeeMonths, tenancyDurationYears),
+    [monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, rentIncreaseRate, bankLoanPeriod, expenseInflationRate, managementRate, capexRate, tenantSearchFeeMonths, tenancyDurationYears]
   );
 
   // Breakeven year from cumulative cashflow
@@ -843,8 +909,8 @@ export default function Charts(props: ChartsProps) {
 
   // Exit scenario
   const exitScenarioData = useMemo(
-    () => computeExitScenario(exitYear, housingPrice, houseWorks, appreciationRate, loanAmount, bankRate, bankLoanPeriod, monthlyMortgage, downPayment, monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, managementRate, rentIncreaseRate, expenseInflationRate, capexRate),
-    [exitYear, housingPrice, houseWorks, appreciationRate, loanAmount, bankRate, bankLoanPeriod, monthlyMortgage, downPayment, monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, managementRate, rentIncreaseRate, expenseInflationRate, capexRate]
+    () => computeExitScenario(exitYear, housingPrice, houseWorks, appreciationRate, loanAmount, bankRate, bankLoanPeriod, monthlyMortgage, downPayment, monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, managementRate, rentIncreaseRate, expenseInflationRate, capexRate, tenantSearchFeeMonths, tenancyDurationYears),
+    [exitYear, housingPrice, houseWorks, appreciationRate, loanAmount, bankRate, bankLoanPeriod, monthlyMortgage, downPayment, monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, managementRate, rentIncreaseRate, expenseInflationRate, capexRate, tenantSearchFeeMonths, tenancyDurationYears]
   );
 
   // Profit composition (for exit scenario donut)
@@ -859,14 +925,14 @@ export default function Charts(props: ChartsProps) {
 
   // ROI by exit year
   const roiByExitYearData = useMemo(
-    () => computeROIByExitYear(housingPrice, houseWorks, appreciationRate, loanAmount, bankRate, bankLoanPeriod, monthlyMortgage, downPayment, monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, managementRate, rentIncreaseRate, expenseInflationRate, capexRate),
-    [housingPrice, houseWorks, appreciationRate, loanAmount, bankRate, bankLoanPeriod, monthlyMortgage, downPayment, monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, managementRate, rentIncreaseRate, expenseInflationRate, capexRate]
+    () => computeROIByExitYear(housingPrice, houseWorks, appreciationRate, loanAmount, bankRate, bankLoanPeriod, monthlyMortgage, downPayment, monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, managementRate, rentIncreaseRate, expenseInflationRate, capexRate, tenantSearchFeeMonths, tenancyDurationYears),
+    [housingPrice, houseWorks, appreciationRate, loanAmount, bankRate, bankLoanPeriod, monthlyMortgage, downPayment, monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, managementRate, rentIncreaseRate, expenseInflationRate, capexRate, tenantSearchFeeMonths, tenancyDurationYears]
   );
 
   // Stress test scenarios
   const stressData = useMemo(
-    () => computeStressScenarios(monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, rentIncreaseRate, bankLoanPeriod, expenseInflationRate, managementRate, capexRate, downPayment, propertyBaseValue, appreciationRate),
-    [monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, rentIncreaseRate, bankLoanPeriod, expenseInflationRate, managementRate, capexRate, downPayment, propertyBaseValue, appreciationRate]
+    () => computeStressScenarios(monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, rentIncreaseRate, bankLoanPeriod, expenseInflationRate, managementRate, capexRate, downPayment, propertyBaseValue, appreciationRate, tenantSearchFeeMonths, tenancyDurationYears),
+    [monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, rentIncreaseRate, bankLoanPeriod, expenseInflationRate, managementRate, capexRate, downPayment, propertyBaseValue, appreciationRate, tenantSearchFeeMonths, tenancyDurationYears]
   );
 
   // Stress test chart data (merged)
@@ -889,14 +955,14 @@ export default function Charts(props: ChartsProps) {
 
   // Waterfall data
   const waterfallData = useMemo(
-    () => computeWaterfallData(monthlyRent, vacancyRate, managementRate, capexRate, monthlyCosts, annualPropertyTax, monthlyMortgage),
-    [monthlyRent, vacancyRate, managementRate, capexRate, monthlyCosts, annualPropertyTax, monthlyMortgage]
+    () => computeWaterfallData(monthlyRent, vacancyRate, managementRate, capexRate, monthlyCosts, annualPropertyTax, monthlyMortgage, tenantSearchFeeMonths, tenancyDurationYears),
+    [monthlyRent, vacancyRate, managementRate, capexRate, monthlyCosts, annualPropertyTax, monthlyMortgage, tenantSearchFeeMonths, tenancyDurationYears]
   );
 
   // Rate sensitivity data
   const rateSensitivityData = useMemo(
-    () => computeRateSensitivity(monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, managementRate, capexRate, loanAmount, bankRate, bankLoanPeriod),
-    [monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, managementRate, capexRate, loanAmount, bankRate, bankLoanPeriod]
+    () => computeRateSensitivity(monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, managementRate, capexRate, loanAmount, bankRate, bankLoanPeriod, tenantSearchFeeMonths, tenancyDurationYears),
+    [monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, managementRate, capexRate, loanAmount, bankRate, bankLoanPeriod, tenantSearchFeeMonths, tenancyDurationYears]
   );
 
   const xAxisInterval = bankLoanPeriod > 20 ? 4 : bankLoanPeriod > 10 ? 1 : 0;
@@ -1180,6 +1246,7 @@ export default function Charts(props: ChartsProps) {
                   <Bar dataKey="fixedCosts" name="Fixed costs" stackId="expenses" fill="#E53E3E" fillOpacity={0.8} />
                   <Bar dataKey="propertyTax" name="Property tax" stackId="expenses" fill="#ED8936" fillOpacity={0.8} />
                   <Bar dataKey="managementFees" name="Management fees" stackId="expenses" fill="#9F7AEA" fillOpacity={0.8} />
+                  <Bar dataKey="tenantSearchFee" name="Tenant search fee" stackId="expenses" fill="#38B2AC" fillOpacity={0.8} />
                   <Bar dataKey="capex" name="CapEx" stackId="expenses" fill="#D69E2E" fillOpacity={0.8} />
                   <Line type="monotone" dataKey="income" name="Rental income" stroke="#48BB78" strokeWidth={2} dot={false} />
                   <Legend wrapperStyle={{ fontSize: "11px", color: textColor }} />

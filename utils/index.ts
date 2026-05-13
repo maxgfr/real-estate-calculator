@@ -81,6 +81,7 @@ export const getNetMonthlyIncomeMixed = (
  * - Monthly insurance
  * - Property management fees (% of effective rent)
  * - Monthly maintenance budget
+ * - Optional: agency tenant search fee (X months of rent amortized over avg tenancy)
  */
 export const getNetMonthlyIncomeDetailed = (
   monthlyRent: string | number,
@@ -90,20 +91,50 @@ export const getNetMonthlyIncomeDetailed = (
   managementRatePercent: string | number,
   monthlyMaintenance: string | number,
   vacancyRatePercent: string | number,
-  decimal = 0
+  decimal = 0,
+  tenantSearchFeeMonths: string | number = 0,
+  tenancyDurationYears: string | number = 3
 ): string => {
   const effectiveRent =
     Number(monthlyRent) * (1 - Number(vacancyRatePercent) / 100);
   const managementFees =
     effectiveRent * (Number(managementRatePercent) / 100);
+  const tenantSearchFee = getTenantSearchFeeMonthly(
+    monthlyRent,
+    tenantSearchFeeMonths,
+    tenancyDurationYears
+  );
   const monthly =
     effectiveRent -
     Number(monthlyCharges) -
     Number(annualPropertyTax) / 12 -
     Number(monthlyInsurance) -
     managementFees -
-    Number(monthlyMaintenance);
+    Number(monthlyMaintenance) -
+    tenantSearchFee;
   return Number.isNaN(monthly) ? "0" : monthly.toFixed(decimal);
+};
+
+/**
+ * Monthly amortized tenant search fee (agency fee for finding a new tenant).
+ * The agency typically charges X months of rent once per tenant turnover.
+ * To get a smooth monthly cost, we amortize over the average tenancy duration.
+ *
+ * monthly fee = (tenantSearchFeeMonths × monthlyRent) / (tenancyDurationYears × 12)
+ *
+ * Returns 0 if any input is invalid or tenancyDurationYears <= 0.
+ */
+export const getTenantSearchFeeMonthly = (
+  monthlyRent: string | number,
+  tenantSearchFeeMonths: string | number,
+  tenancyDurationYears: string | number
+): number => {
+  const months = Number(tenantSearchFeeMonths);
+  const duration = Number(tenancyDurationYears);
+  const rent = Number(monthlyRent);
+  if (!isFinite(months) || !isFinite(duration) || !isFinite(rent)) return 0;
+  if (months <= 0 || duration <= 0 || rent <= 0) return 0;
+  return (months * rent) / (duration * 12);
 };
 
 export const getTotalPurchasePrice = (
@@ -163,12 +194,19 @@ export const getBreakEvenRent = (
   vacancyRatePercent: string | number,
   managementRatePercent: string | number = 0,
   capexRatePercent: string | number = 0,
-  decimal = 0
+  decimal = 0,
+  tenantSearchFeeMonths: string | number = 0,
+  tenancyDurationYears: string | number = 3
 ): string => {
   const vacancyFactor = 1 - Number(vacancyRatePercent) / 100;
   const mgmtFactor = 1 - Number(managementRatePercent) / 100;
   const capexFactor = Number(capexRatePercent) / 100;
-  const denominator = vacancyFactor * mgmtFactor - capexFactor;
+  // Tenant search fee scales linearly with rent (X months / (D years × 12))
+  const tsfMonths = Number(tenantSearchFeeMonths);
+  const tsfYears = Number(tenancyDurationYears);
+  const tsfFactor =
+    tsfMonths > 0 && tsfYears > 0 ? tsfMonths / (tsfYears * 12) : 0;
+  const denominator = vacancyFactor * mgmtFactor - capexFactor - tsfFactor;
   if (denominator <= 0) return '0';
   const rent =
     (Number(monthlyCosts) +
@@ -272,7 +310,9 @@ export function computeExitScenario(
   managementRate: number,
   rentIncreaseRate: number,
   expenseInflationRate: number,
-  capexRate: number = 0
+  capexRate: number = 0,
+  tenantSearchFeeMonths: number = 0,
+  tenancyDurationYears: number = 3
 ): ExitScenarioResult | null {
   if (exitYear <= 0 || loanAmount < 0) return null;
 
@@ -297,15 +337,20 @@ export function computeExitScenario(
   const equityPaid = loanAmount - remainingBalance;
 
   // Cumulative cashflow
+  const tsfFactor =
+    tenantSearchFeeMonths > 0 && tenancyDurationYears > 0
+      ? tenantSearchFeeMonths / (tenancyDurationYears * 12)
+      : 0;
   let cumulativeCF = -downPayment;
   for (let y = 1; y <= exitYear; y++) {
     const rent = monthlyRent * Math.pow(1 + rentIncreaseRate / 100, y - 1);
     const effectiveRent = rent * (1 - vacancyRate / 100);
     const mgmtFees = effectiveRent * (managementRate / 100);
     const capex = rent * (capexRate / 100);
+    const tenantSearchFee = rent * tsfFactor;
     const inflatedCosts = monthlyCosts * Math.pow(1 + expenseInflationRate / 100, y - 1);
     const inflatedTax = annualPropertyTax * Math.pow(1 + expenseInflationRate / 100, y - 1);
-    const netIncome = effectiveRent - mgmtFees - capex - inflatedCosts - inflatedTax / 12;
+    const netIncome = effectiveRent - mgmtFees - capex - tenantSearchFee - inflatedCosts - inflatedTax / 12;
     const mortgage = y <= bankLoanPeriod ? monthlyMortgage : 0;
     cumulativeCF += (netIncome - mortgage) * 12;
   }
@@ -359,8 +404,14 @@ export function computeStressScenarios(
   capexRate: number,
   downPayment: number,
   propertyBaseValue: number,
-  appreciationRate: number
+  appreciationRate: number,
+  tenantSearchFeeMonths: number = 0,
+  tenancyDurationYears: number = 3
 ): StressScenarioResult[] {
+  const tsfFactor =
+    tenantSearchFeeMonths > 0 && tenancyDurationYears > 0
+      ? tenantSearchFeeMonths / (tenancyDurationYears * 12)
+      : 0;
   const scenarios = [
     { label: "Optimistic", vacancy: vacancyRate * 0.5, rentInc: rentIncreaseRate + 1, expInf: expenseInflationRate },
     { label: "Base", vacancy: vacancyRate, rentInc: rentIncreaseRate, expInf: expenseInflationRate },
@@ -378,9 +429,10 @@ export function computeStressScenarios(
       const effectiveRent = rent * (1 - s.vacancy / 100);
       const mgmtFees = effectiveRent * (managementRate / 100);
       const capex = rent * (capexRate / 100);
+      const tenantSearchFee = rent * tsfFactor;
       const inflatedCosts = monthlyCosts * Math.pow(1 + s.expInf / 100, y - 1);
       const inflatedTax = annualPropertyTax * Math.pow(1 + s.expInf / 100, y - 1);
-      const netIncome = effectiveRent - mgmtFees - capex - inflatedCosts - inflatedTax / 12;
+      const netIncome = effectiveRent - mgmtFees - capex - tenantSearchFee - inflatedCosts - inflatedTax / 12;
       const mortgage = y <= loanPeriod ? monthlyMortgage : 0;
       const annualCashflow = (netIncome - mortgage) * 12;
       annualData.push({ year: y, cashflow: Math.round(annualCashflow) });
@@ -397,7 +449,8 @@ export function computeStressScenarios(
     const eff1 = rent1 * (1 - s.vacancy / 100);
     const mgmt1 = eff1 * (managementRate / 100);
     const capex1 = rent1 * (capexRate / 100);
-    const netIncome1 = eff1 - mgmt1 - capex1 - monthlyCosts - annualPropertyTax / 12;
+    const tenantSearchFee1 = rent1 * tsfFactor;
+    const netIncome1 = eff1 - mgmt1 - capex1 - tenantSearchFee1 - monthlyCosts - annualPropertyTax / 12;
     const dscrVal = monthlyMortgage === 0 ? '∞' : (netIncome1 / monthlyMortgage).toFixed(2);
 
     // Total return at loan end
@@ -408,9 +461,10 @@ export function computeStressScenarios(
       const effectiveRent = rent * (1 - s.vacancy / 100);
       const mgmtFees = effectiveRent * (managementRate / 100);
       const capex = rent * (capexRate / 100);
+      const tenantSearchFee = rent * tsfFactor;
       const inflatedCosts = monthlyCosts * Math.pow(1 + s.expInf / 100, y - 1);
       const inflatedTax = annualPropertyTax * Math.pow(1 + s.expInf / 100, y - 1);
-      const netIncome = effectiveRent - mgmtFees - capex - inflatedCosts - inflatedTax / 12;
+      const netIncome = effectiveRent - mgmtFees - capex - tenantSearchFee - inflatedCosts - inflatedTax / 12;
       cumAtLoanEnd += (netIncome - monthlyMortgage) * 12;
     }
     const totalReturn = Math.round(propValue + cumAtLoanEnd);
