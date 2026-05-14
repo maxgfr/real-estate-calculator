@@ -18,8 +18,6 @@ const defaultState = {
   rentIncreaseRate: 1.5,
   expenseInflationRate: 2,
   capexRate: 3,
-  tenantSearchFeeMonths: 0,
-  tenancyDurationYears: 3,
   exitYear: 25,
 } as const;
 
@@ -35,19 +33,6 @@ describe("parseStateFromQuery", () => {
     expect(result.housingPrice).toBe(150000);
   });
 
-  it("handles the new tenantSearchFeeMonths from URL", () => {
-    const result = parseStateFromQuery({ tenantSearchFeeMonths: "1.5" }, defaultState);
-    expect(result.tenantSearchFeeMonths).toBe("1.5");
-    // Numeric coercion (what the page does) should round-trip cleanly
-    expect(Number(result.tenantSearchFeeMonths)).toBe(1.5);
-  });
-
-  it("handles the new tenancyDurationYears from URL", () => {
-    const result = parseStateFromQuery({ tenancyDurationYears: "5" }, defaultState);
-    expect(result.tenancyDurationYears).toBe("5");
-    expect(Number(result.tenancyDurationYears)).toBe(5);
-  });
-
   it("ignores unknown keys (URL tampering / typos)", () => {
     const result = parseStateFromQuery(
       { housingPrice: "200000", unknownKey: "evil", __proto__: "x" },
@@ -59,8 +44,8 @@ describe("parseStateFromQuery", () => {
 
   it("falls back to default when a key is missing from the URL", () => {
     const result = parseStateFromQuery({ rent: "750" }, defaultState);
-    expect(result.tenantSearchFeeMonths).toBe(0);
-    expect(result.tenancyDurationYears).toBe(3);
+    expect(result.managementRate).toBe(0);
+    expect(result.capexRate).toBe(3);
   });
 
   it("takes the first value when the URL repeats a key", () => {
@@ -73,11 +58,11 @@ describe("parseStateFromQuery", () => {
     expect(result.rent).toBe(900);
   });
 
-  it("preserves decimal values for the agency fee parameter", () => {
-    // Common parameter examples mentioned by the user: 1, 1.2, 1.5
+  it("preserves decimal values for management fees in months/year", () => {
+    // User may enter 1, 1.2, 1.5 months/year via the unit toggle
     for (const v of ["1", "1.2", "1.5", "2", "0"]) {
-      const result = parseStateFromQuery({ tenantSearchFeeMonths: v }, defaultState);
-      expect(Number(result.tenantSearchFeeMonths)).toBe(Number(v));
+      const result = parseStateFromQuery({ managementRate: v }, defaultState);
+      expect(Number(result.managementRate)).toBe(Number(v));
     }
   });
 });
@@ -93,20 +78,18 @@ describe("serializeStateToQuery", () => {
     for (const key of Object.keys(defaultState)) {
       expect(out[key]).toBeDefined();
     }
-    expect(out.tenantSearchFeeMonths).toBe("0");
-    expect(out.tenancyDurationYears).toBe("3");
+    expect(out.managementRate).toBe("0");
+    expect(out.capexRate).toBe("3");
   });
 
   it("round-trips through parseStateFromQuery", () => {
     const serialized = serializeStateToQuery({
       ...defaultState,
-      tenantSearchFeeMonths: 1.5,
-      tenancyDurationYears: 4,
+      managementRate: 1.5,
       rent: 1200,
     });
     const reparsed = parseStateFromQuery(serialized, defaultState);
-    expect(Number(reparsed.tenantSearchFeeMonths)).toBe(1.5);
-    expect(Number(reparsed.tenancyDurationYears)).toBe(4);
+    expect(Number(reparsed.managementRate)).toBe(1.5);
     expect(Number(reparsed.rent)).toBe(1200);
     // unchanged keys still round-trip
     expect(Number(reparsed.housingPrice)).toBe(defaultState.housingPrice);
@@ -115,14 +98,14 @@ describe("serializeStateToQuery", () => {
   it("produces values URLSearchParams can safely encode", () => {
     const out = serializeStateToQuery({
       ...defaultState,
-      tenantSearchFeeMonths: 1.5,
+      managementRate: 1.5,
     });
     const params = new URLSearchParams(out);
     const url = `?${params.toString()}`;
     // parse back via URL
     const parsed = new URLSearchParams(url);
-    expect(parsed.get("tenantSearchFeeMonths")).toBe("1.5");
-    expect(parsed.get("tenancyDurationYears")).toBe("3");
+    expect(parsed.get("managementRate")).toBe("1.5");
+    expect(parsed.get("capexRate")).toBe("3");
     expect(parsed.get("rent")).toBe("900");
   });
 });

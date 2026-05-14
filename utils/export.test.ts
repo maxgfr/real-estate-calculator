@@ -30,8 +30,6 @@ const inputs: ExportInputs = {
   rentIncreaseRate: 1.5,
   expenseInflationRate: 2,
   capexRate: 3,
-  tenantSearchFeeMonths: 0,
-  tenancyDurationYears: 3,
   exitYear: 25,
 };
 
@@ -268,48 +266,6 @@ describe('buildExportSheets', () => {
     });
   });
 
-  describe('tenant search fee rows', () => {
-    it('should output zero amortized fee when months is 0 (default)', () => {
-      const monthlyRow = sheets.rental.find(r => r[0] === 'Tenant search fee (amortized monthly)');
-      expect(monthlyRow).toBeDefined();
-      expect(monthlyRow![1]).toBe(0);
-      expect(monthlyRow![2]).toBe(0);
-    });
-
-    it('should compute amortized monthly fee correctly when set', () => {
-      const i = { ...inputs, tenantSearchFeeMonths: 1, tenancyDurationYears: 3 };
-      const s = buildExportSheets(i, metrics, projections, exitScenario, stressScenarios);
-      // (1 × 900) / (3 × 12) = 25
-      const monthlyRow = s.rental.find(r => r[0] === 'Tenant search fee (amortized monthly)');
-      expect(monthlyRow).toBeDefined();
-      expect(monthlyRow![1]).toBe(25);
-      expect(monthlyRow![2]).toBe(300);
-    });
-
-    it('should compute amortized monthly fee for 1.2 months over 3 years', () => {
-      const i = { ...inputs, tenantSearchFeeMonths: 1.2, tenancyDurationYears: 3 };
-      const s = buildExportSheets(i, metrics, projections, exitScenario, stressScenarios);
-      // (1.2 × 900) / 36 = 30
-      const monthlyRow = s.rental.find(r => r[0] === 'Tenant search fee (amortized monthly)');
-      expect(monthlyRow![1]).toBe(30);
-    });
-
-    it('should output the input value for "months of rent" row', () => {
-      const i = { ...inputs, tenantSearchFeeMonths: 1.5, tenancyDurationYears: 4 };
-      const s = buildExportSheets(i, metrics, projections, exitScenario, stressScenarios);
-      const monthsRow = s.rental.find(r => r[0] === 'Tenant search fee (months of rent)');
-      expect(monthsRow![1]).toBe(1.5);
-      const durationRow = s.rental.find(r => r[0] === 'Avg. tenancy duration (years)');
-      expect(durationRow![1]).toBe(4);
-    });
-
-    it('should output 0 if tenancyDurationYears is 0 (no div by zero)', () => {
-      const i = { ...inputs, tenantSearchFeeMonths: 1, tenancyDurationYears: 0 };
-      const s = buildExportSheets(i, metrics, projections, exitScenario, stressScenarios);
-      const monthlyRow = s.rental.find(r => r[0] === 'Tenant search fee (amortized monthly)');
-      expect(monthlyRow![1]).toBe(0);
-    });
-  });
 });
 
 describe('Export label completeness (UI ↔ Export contract)', () => {

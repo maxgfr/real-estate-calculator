@@ -18,8 +18,6 @@ export type ExportInputs = {
   rentIncreaseRate: number;
   expenseInflationRate: number;
   capexRate: number;
-  tenantSearchFeeMonths: number;
-  tenancyDurationYears: number;
   exitYear: number;
 };
 
@@ -91,9 +89,6 @@ export const RENTAL_LABELS = [
   "Effective rent (after vacancy)",
   "Monthly fixed costs (charges, insurance, maintenance)",
   "Management fees (% of rent)",
-  "Tenant search fee (months of rent)",
-  "Avg. tenancy duration (years)",
-  "Tenant search fee (amortized monthly)",
   "Property tax",
   "Expense inflation rate",
   "CapEx reserve (% of gross rent)",
@@ -157,12 +152,6 @@ export function buildExportSheets(
   stressScenarios: StressScenarioResult[]
 ): ExportSheets {
   const effectiveRent = inputs.rent * (1 - inputs.vacancyRate / 100);
-  // Amortized monthly tenant search fee (agency fee for finding new tenant)
-  const tenantSearchFeeMonthly =
-    inputs.tenantSearchFeeMonths > 0 && inputs.tenancyDurationYears > 0
-      ? (inputs.tenantSearchFeeMonths * inputs.rent) /
-        (inputs.tenancyDurationYears * 12)
-      : 0;
 
   const purchase: SheetData = [
     ["Item", "Amount"],
@@ -189,9 +178,6 @@ export function buildExportSheets(
     ["Effective rent (after vacancy)", effectiveRent, effectiveRent * 12],
     ["Monthly fixed costs (charges, insurance, maintenance)", inputs.monthlyCosts, inputs.monthlyCosts * 12],
     ["Management fees (% of rent)", `${inputs.managementRate} %`, ""],
-    ["Tenant search fee (months of rent)", inputs.tenantSearchFeeMonths, "Per tenant turnover"],
-    ["Avg. tenancy duration (years)", inputs.tenancyDurationYears, "For amortization"],
-    ["Tenant search fee (amortized monthly)", Math.round(tenantSearchFeeMonthly), Math.round(tenantSearchFeeMonthly * 12)],
     ["Property tax", inputs.propertyTax / 12, inputs.propertyTax],
     ["Expense inflation rate", `${inputs.expenseInflationRate} %`, "Annual"],
     ["CapEx reserve (% of gross rent)", `${inputs.capexRate} %`, ""],
