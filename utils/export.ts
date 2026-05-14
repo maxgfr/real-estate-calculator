@@ -1,5 +1,13 @@
 import type { ExitScenarioResult, StressScenarioResult } from "./index";
 
+// Round a number to at most 2 decimals, stripping trailing zeros for display.
+// Used for percentage fields in the Excel export where the value may come from
+// a unit conversion (e.g., 1 month/year → 8.333333%/mo).
+function roundForDisplay(n: number): number {
+  if (!isFinite(n)) return 0;
+  return Math.round(n * 100) / 100;
+}
+
 // --- Types ---
 
 export type ExportInputs = {
@@ -177,7 +185,7 @@ export function buildExportSheets(
     ["Vacancy rate", `${inputs.vacancyRate} %`, ""],
     ["Effective rent (after vacancy)", effectiveRent, effectiveRent * 12],
     ["Monthly fixed costs (charges, insurance, maintenance)", inputs.monthlyCosts, inputs.monthlyCosts * 12],
-    ["Management fees (% of rent)", `${inputs.managementRate} %`, ""],
+    ["Management fees (% of rent)", `${roundForDisplay(inputs.managementRate)} %`, ""],
     ["Property tax", inputs.propertyTax / 12, inputs.propertyTax],
     ["Expense inflation rate", `${inputs.expenseInflationRate} %`, "Annual"],
     ["CapEx reserve (% of gross rent)", `${inputs.capexRate} %`, ""],
@@ -204,7 +212,7 @@ export function buildExportSheets(
     ["Appreciation rate", `${inputs.appreciationRate} %`, "Annual (property value)"],
     ["Rent increase rate", `${inputs.rentIncreaseRate} %`, "Annual"],
     ["Expense inflation rate", `${inputs.expenseInflationRate} %`, "Annual (costs + tax)"],
-    ["Management fees", `${inputs.managementRate} %`, "Of effective rent"],
+    ["Management fees", `${roundForDisplay(inputs.managementRate)} %`, "Of effective rent"],
     ["CapEx reserve", `${inputs.capexRate} %`, "Of gross rent"],
     ["Cap Rate", metrics.capRate === '0' ? 'N/A' : `${metrics.capRate} %`, "NOI / Property value"],
     ["1% Rule", `${metrics.onePercentRule} %`, "Monthly rent / Purchase price"],

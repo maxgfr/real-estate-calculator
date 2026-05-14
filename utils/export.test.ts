@@ -264,6 +264,33 @@ describe('buildExportSheets', () => {
       const row = s.results.find(r => r[0] === 'Cap Rate');
       expect(row![1]).toBe('N/A');
     });
+
+    it('should round management rate to 2 decimals (handles months/year unit conversion)', () => {
+      // When the user picks 'months/year' unit, the page computes
+      // effectiveMgmtRatePercent = 1 × 100 / 12 = 8.333333... which would
+      // otherwise show as '8.333333333333334 %' in the Excel cell.
+      const i = { ...inputs, managementRate: 8.333333333333334 };
+      const s = buildExportSheets(i, metrics, projections, exitScenario, stressScenarios);
+      const rentalRow = s.rental.find(r => r[0] === 'Management fees (% of rent)');
+      expect(rentalRow![1]).toBe('8.33 %');
+      const resultsRow = s.results.find(r => r[0] === 'Management fees');
+      expect(resultsRow![1]).toBe('8.33 %');
+    });
+
+    it('should leave clean values untouched in display (8% stays "8 %")', () => {
+      const i = { ...inputs, managementRate: 8 };
+      const s = buildExportSheets(i, metrics, projections, exitScenario, stressScenarios);
+      const rentalRow = s.rental.find(r => r[0] === 'Management fees (% of rent)');
+      expect(rentalRow![1]).toBe('8 %');
+    });
+
+    it('should round high-precision capex/management exports gracefully', () => {
+      // Even if upstream passes Infinity (defensive), the export should not crash
+      const i = { ...inputs, managementRate: Infinity };
+      const s = buildExportSheets(i, metrics, projections, exitScenario, stressScenarios);
+      const rentalRow = s.rental.find(r => r[0] === 'Management fees (% of rent)');
+      expect(rentalRow![1]).toBe('0 %');
+    });
   });
 
 });
