@@ -20,6 +20,11 @@ pnpm test:coverage    # Jest with coverage
 npx jest path/to/file # Run a single test file
 ```
 
+Tests for the page live in `__tests__/`, not in `pages/`: Next treats every file
+under `pages/` as a route, so a `pages/*.test.tsx` builds into a page and breaks
+`pnpm build` at page-data collection. Tests next to the code are fine anywhere
+else (`utils/`, `components/`).
+
 ## Architecture
 
 **Data flow**: Input fields (16 params) → `useState` + URL sync → `analyzeDeal()` → results display + charts

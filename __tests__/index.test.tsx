@@ -9,7 +9,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChakraProvider } from "@chakra-ui/react";
 
-import Home from "./index";
+import Home from "../pages/index";
 import { analyzeDeal, DEAL_DEFAULTS } from "../utils/deal";
 
 // Charts are heavy, client-only and covered by their own suite. Record the
