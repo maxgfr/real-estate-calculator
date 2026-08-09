@@ -80,6 +80,8 @@ const CHART_TITLES = [
   "Annual Cashflow",
   "Income vs Expenses",
   "Expense Decomposition by Year",
+  // Equity Build-Up carries the appreciation rate in its title unless the rate
+  // is zero, so it is asserted separately below rather than listed here.
   "Cumulative Cashflow Projection",
   "Total Return on Investment",
   "Profit Composition at Exit",
@@ -93,6 +95,18 @@ describe("Charts", () => {
     for (const title of CHART_TITLES) {
       expect(screen.getByText(title)).toBeInTheDocument();
     }
+    // 18th chart: README's chart table must stay in step with what renders.
+    expect(screen.getByText(/^Equity Build-Up/)).toBeInTheDocument();
+    expect(CHART_TITLES.length + 1).toBe(18);
+  });
+
+  it("labels Equity Build-Up with the appreciation rate, and drops it at zero", () => {
+    const { unmount } = renderCharts({ ...DEAL_DEFAULTS, appreciationRate: 2.5 });
+    expect(screen.getByText("Equity Build-Up (+2.5%/yr)")).toBeInTheDocument();
+    unmount();
+
+    renderCharts({ ...DEAL_DEFAULTS, appreciationRate: 0 });
+    expect(screen.getByText("Equity Build-Up")).toBeInTheDocument();
   });
 
   it("renders the five section headings", () => {
