@@ -43,34 +43,10 @@ import {
 import { InfoOutlineIcon, MoonIcon, SunIcon } from "@chakra-ui/icons";
 
 import {
-  getDownPayment,
-  getTotalMortgageInterest,
-  getMonthlyMortgagePayment,
-  getTotalMortgageCost,
-  getTotalPurchasePrice,
-  getYield,
-  getTotalOperationCost,
-  getCashOnCash,
-  getBreakEvenRent,
-  getLTV,
-  getDSCR,
-  getGRM,
-  getCapRate,
-  getOnePercentRule,
-  getOER,
-  computeExitScenario,
-  computeStressScenarios,
   getEffectiveManagementRatePercent,
   type ManagementRateUnit,
 } from "../utils";
-import {
-  firstBreakevenYear,
-  monthlyIncomeBreakdown,
-  projectionHorizon,
-  yearCashflow,
-  type EscalationRates,
-  type OperatingInputs,
-} from "../utils/model";
+import { analyzeDeal } from "../utils/deal";
 
 type Key =
   | "housingPrice"
@@ -302,245 +278,56 @@ const Home: NextPage = () => {
     [state.managementRate, managementRateUnit]
   );
 
-  const totalPrice = useMemo(
-    () => getTotalPurchasePrice(state.housingPrice, state.notaryFees, state.houseWorks),
-    [state.housingPrice, state.notaryFees, state.houseWorks]
-  );
-
-  const downPayment = useMemo(
-    () => getDownPayment(state.bankLoan, totalPrice),
-    [state.bankLoan, totalPrice]
-  );
-
-  // Full-precision value for all calculations
-  const monthlyMortgageExact = useMemo(
+  // Every indicator comes from one derivation so the page, the Excel export and
+  // the MCP server cannot drift apart.
+  const metrics = useMemo(
     () =>
-      Number(getMonthlyMortgagePayment(state.bankLoan, state.bankRate, state.bankLoanPeriod, 10)),
-    [state.bankLoan, state.bankRate, state.bankLoanPeriod]
-  );
-
-  // Rounded string for display only
-  const monthlyMortgagePayment = useMemo(
-    () => Math.round(monthlyMortgageExact).toFixed(0),
-    [monthlyMortgageExact]
-  );
-
-  const totalMortgageInterest = useMemo(
-    () =>
-      getTotalMortgageInterest(
-        state.bankLoan,
-        state.bankLoanPeriod,
-        state.bankRate
-      ),
-    [state.bankLoan, state.bankLoanPeriod, state.bankRate]
-  );
-
-  const totalMortgageCost = useMemo(
-    () => getTotalMortgageCost(state.bankLoan, totalMortgageInterest),
-    [state.bankLoan, totalMortgageInterest]
-  );
-
-  // Full-precision monthly income breakdown — the single source for every
-  // income-derived metric below (net income, NOI, cashflow, yields, DSCR, OER).
-  const income = useMemo(
-    () =>
-      monthlyIncomeBreakdown({
-        monthlyRent: Number(state.rent),
+      analyzeDeal({
+        housingPrice: Number(state.housingPrice),
+        notaryFees: Number(state.notaryFees),
+        houseWorks: Number(state.houseWorks),
+        appreciationRate: Number(state.appreciationRate),
+        exitYear: Number(state.exitYear),
+        bankLoan: Number(state.bankLoan),
+        bankRate: Number(state.bankRate),
+        bankLoanPeriod: Number(state.bankLoanPeriod),
+        rent: Number(state.rent),
+        propertyTax: Number(state.propertyTax),
         monthlyCosts: Number(state.monthlyCosts),
-        annualPropertyTax: Number(state.propertyTax),
-        vacancyRate: Number(state.vacancyRate),
         managementRate: effectiveMgmtRatePercent,
         capexRate: Number(state.capexRate),
+        vacancyRate: Number(state.vacancyRate),
+        rentIncreaseRate: Number(state.rentIncreaseRate),
+        expenseInflationRate: Number(state.expenseInflationRate),
       }),
-    [state.rent, state.monthlyCosts, state.propertyTax, effectiveMgmtRatePercent, state.vacancyRate, state.capexRate]
+    [state, effectiveMgmtRatePercent]
   );
 
-  const netMonthlyIncomeExact = useMemo(
-    () => (isNaN(income.netIncome) ? 0 : income.netIncome),
-    [income]
-  );
-
-  // Rounded string for display only
-  const netMonthlyIncome = useMemo(
-    () => netMonthlyIncomeExact.toFixed(0),
-    [netMonthlyIncomeExact]
-  );
-
-  const grossYield = useMemo(
-    () => getYield(Number(state.rent) * 12, totalPrice),
-    [state.rent, totalPrice]
-  );
-
-  const netYield = useMemo(
-    () => getYield(netMonthlyIncomeExact * 12, totalPrice),
-    [netMonthlyIncomeExact, totalPrice]
-  );
-
-  // Full-precision cashflow for all calculations
-  const cashflowExact = useMemo(
-    () => netMonthlyIncomeExact - monthlyMortgageExact,
-    [netMonthlyIncomeExact, monthlyMortgageExact]
-  );
-
-  // Rounded string for display only
-  const cashflow = useMemo(
-    () => Number.isNaN(cashflowExact) ? "0" : cashflowExact.toFixed(0),
-    [cashflowExact]
-  );
-
-  const totalOperationCost = useMemo(
-    () => getTotalOperationCost(totalPrice, totalMortgageInterest),
-    [totalPrice, totalMortgageInterest]
-  );
-
-  const cashOnCash = useMemo(
-    () => getCashOnCash(cashflowExact * 12, downPayment),
-    [cashflowExact, downPayment]
-  );
-
-  const breakEvenRent = useMemo(
-    () => getBreakEvenRent(state.monthlyCosts, state.propertyTax, monthlyMortgageExact, state.vacancyRate, effectiveMgmtRatePercent, state.capexRate),
-    [state.monthlyCosts, state.propertyTax, monthlyMortgageExact, state.vacancyRate, effectiveMgmtRatePercent, state.capexRate]
-  );
-
-  const ltv = useMemo(
-    () => getLTV(state.bankLoan, state.housingPrice),
-    [state.bankLoan, state.housingPrice]
-  );
-
-  // DSCR is a lender's ratio, computed on NOI. CapEx is a capital reserve, not
-  // an operating expense, so it is excluded here exactly as it is from the cap
-  // rate below — the two used to disagree on what "income" meant.
-  const dscr = useMemo(
-    () => getDSCR(income.noi, monthlyMortgageExact),
-    [income, monthlyMortgageExact]
-  );
-
-  const grm = useMemo(
-    () => getGRM(state.housingPrice, Number(state.rent) * 12),
-    [state.housingPrice, state.rent]
-  );
-
-  // NOI = Effective rent - operating expenses (before debt service and CapEx reserve)
-  // CapEx is a capital reserve, not an operating expense — excluded from NOI per industry standard
-  const noi = useMemo(() => String(income.noi * 12), [income]);
-
-  // Cap Rate = NOI / Property Value (purchase + renovation)
-  const capRate = useMemo(
-    () => getCapRate(noi, String(Number(state.housingPrice) + Number(state.houseWorks))),
-    [noi, state.housingPrice, state.houseWorks]
-  );
-
-  // 1% Rule = Monthly rent / Purchase price
-  const onePercentRule = useMemo(
-    () => getOnePercentRule(state.rent, state.housingPrice),
-    [state.rent, state.housingPrice]
-  );
-
-  // OER = Monthly operating expenses / Monthly gross effective income (excludes
-  // mortgage and, like NOI, the CapEx reserve)
-  const oer = useMemo(() => {
-    const operatingExpenses = income.effectiveRent - income.noi;
-    return getOER(String(Math.max(0, operatingExpenses)), String(income.effectiveRent));
-  }, [income]);
-
-  const projections = useMemo(() => {
-    const period = Number(state.bankLoanPeriod);
-    const appRate = Number(state.appreciationRate);
-    const rentRate = Number(state.rentIncreaseRate);
-    const rent = Number(state.rent);
-    const costs = Number(state.monthlyCosts);
-    const tax = Number(state.propertyTax);
-    const vacancy = Number(state.vacancyRate);
-    const dp = Number(downPayment);
-    const base = Number(state.housingPrice) + Number(state.houseWorks);
-    const inflRate = Number(state.expenseInflationRate);
-    const mgmtRate = effectiveMgmtRatePercent;
-    const capex = Number(state.capexRate);
-
-    if (period <= 0 || isNaN(base)) return null;
-
-    // Property value at loan end (with appreciation)
-    const propertyValue = Math.round(base * Math.pow(1 + appRate / 100, period));
-
-    // Projected monthly rent at loan end
-    const rentAtEnd = Math.round(rent * Math.pow(1 + rentRate / 100, period));
-
-    // Monthly cashflow AFTER loan (no more mortgage, rent has grown)
-    const cashflowAfterLoan = Math.round(
-      monthlyIncomeBreakdown({
-        monthlyRent: rentAtEnd,
-        monthlyCosts: costs * Math.pow(1 + inflRate / 100, period),
-        annualPropertyTax: tax * Math.pow(1 + inflRate / 100, period),
-        vacancyRate: vacancy,
-        managementRate: mgmtRate,
-        capexRate: capex,
-      }).netIncome
-    );
-
-    const operating: OperatingInputs = {
-      monthlyRent: rent,
-      monthlyCosts: costs,
-      annualPropertyTax: tax,
-      vacancyRate: vacancy,
-      managementRate: mgmtRate,
-      capexRate: capex,
-    };
-    const escalation: EscalationRates = {
-      rentIncreaseRate: rentRate,
-      expenseInflationRate: inflRate,
-    };
-
-    // Cumulative cashflow over extended horizon (beyond loan to find breakeven)
-    const cumulative: number[] = [-dp];
-    for (let y = 1; y <= projectionHorizon(period); y++) {
-      const { annualCashflow } = yearCashflow(operating, escalation, y, monthlyMortgageExact, period);
-      cumulative.push(cumulative[cumulative.length - 1] + annualCashflow);
-    }
-    const breakevenYear = firstBreakevenYear(cumulative);
-
-    // Cumulative cashflow at loan end specifically
-    let cumulativeCFAtLoanEnd = -dp;
-    for (let y = 1; y <= period; y++) {
-      cumulativeCFAtLoanEnd += yearCashflow(operating, escalation, y, monthlyMortgageExact, period).annualCashflow;
-    }
-
-    // Total return = equity (property value, loan repaid) + cumulative cashflow at loan end
-    const totalReturn = Math.round(propertyValue + cumulativeCFAtLoanEnd);
-
-    return {
-      propertyValue,
-      rentAtEnd,
-      cashflowAfterLoan,
-      cumulativeCashflow: Math.round(cumulativeCFAtLoanEnd),
-      totalReturn,
-      breakevenYear,
-      hasAppreciation: appRate !== 0,
-      hasRentIncrease: rentRate !== 0,
-      period,
-    };
-  }, [state.bankLoanPeriod, state.appreciationRate, state.rentIncreaseRate, state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, state.expenseInflationRate, effectiveMgmtRatePercent, state.capexRate, monthlyMortgageExact, downPayment, state.housingPrice, state.houseWorks]);
-
-  const exitScenario = useMemo(() => {
-    return computeExitScenario(
-      Number(state.exitYear), Number(state.housingPrice), Number(state.houseWorks),
-      Number(state.appreciationRate), Number(state.bankLoan), Number(state.bankRate),
-      Number(state.bankLoanPeriod), monthlyMortgageExact, Number(downPayment),
-      Number(state.rent), Number(state.monthlyCosts), Number(state.propertyTax),
-      Number(state.vacancyRate), effectiveMgmtRatePercent, Number(state.rentIncreaseRate),
-      Number(state.expenseInflationRate), Number(state.capexRate)
-    );
-  }, [state.exitYear, state.housingPrice, state.houseWorks, state.appreciationRate, state.bankLoan, state.bankRate, state.bankLoanPeriod, monthlyMortgageExact, downPayment, state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, effectiveMgmtRatePercent, state.rentIncreaseRate, state.expenseInflationRate, state.capexRate]);
-
-  const stressScenarios = useMemo(() => {
-    const base = Number(state.housingPrice) + Number(state.houseWorks);
-    return computeStressScenarios(
-      Number(state.rent), Number(state.monthlyCosts), Number(state.propertyTax),
-      Number(state.vacancyRate), monthlyMortgageExact, Number(state.rentIncreaseRate),
-      Number(state.bankLoanPeriod), Number(state.expenseInflationRate), effectiveMgmtRatePercent,
-      Number(state.capexRate), Number(downPayment), base, Number(state.appreciationRate)
-    );
-  }, [state.rent, state.monthlyCosts, state.propertyTax, state.vacancyRate, monthlyMortgageExact, state.rentIncreaseRate, state.bankLoanPeriod, state.expenseInflationRate, effectiveMgmtRatePercent, state.capexRate, downPayment, state.housingPrice, state.houseWorks, state.appreciationRate]);
+  const {
+    totalPrice,
+    downPayment,
+    monthlyMortgageExact,
+    monthlyMortgagePayment,
+    totalMortgageInterest,
+    totalMortgageCost,
+    totalOperationCost,
+    netMonthlyIncome,
+    cashflowExact,
+    cashflow,
+    grossYield,
+    netYield,
+    cashOnCash,
+    breakEvenRent,
+    ltv,
+    dscr,
+    grm,
+    capRate,
+    onePercentRule,
+    oer,
+    projections,
+    exitScenario,
+    stressScenarios,
+  } = metrics;
 
   const onReset = () => {
     setState(defaultState);
