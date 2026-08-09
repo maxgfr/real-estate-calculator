@@ -33,7 +33,8 @@
 pnpm install   # Install dependencies
 pnpm dev       # Start dev server (http://localhost:3000)
 pnpm build     # Production build
-pnpm test      # Run tests (235)
+pnpm test      # Run tests (253)
+pnpm typecheck # tsc --noEmit across the whole repo, MCP server included
 pnpm mcp       # Run the MCP server on stdio
 ```
 
