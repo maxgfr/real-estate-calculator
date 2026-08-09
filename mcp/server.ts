@@ -13,6 +13,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+import { rateIndicator } from "../utils/benchmarks.ts";
 import { analyzeDeal, DEAL_DEFAULTS, MODEL_CAVEATS, type DealInputs } from "../utils/deal.ts";
 import {
   computeAmortization,
@@ -66,27 +67,6 @@ const dealShape = {
     .describe("Annual inflation applied to fixed costs and property tax, %"),
 };
 
-/** Benchmarks documented in README.md. */
-function verdict(metric: string, value: number): "excellent" | "good" | "weak" {
-  const grade = (v: number, good: number, excellent: number) =>
-    v >= excellent ? "excellent" : v >= good ? "good" : "weak";
-  switch (metric) {
-    case "netYield": return grade(value, 3, 5);
-    case "cashOnCash": return grade(value, 4, 8);
-    case "dscr": return grade(value, 1.25, 1.5);
-    case "capRate": return grade(value, 4, 6);
-    case "onePercentRule": return grade(value, 0.7, 1);
-    case "grm": return value <= 15 ? "excellent" : value <= 20 ? "good" : "weak";
-    case "oer": return value <= 40 ? "excellent" : value <= 60 ? "good" : "weak";
-    default: return "weak";
-  }
-}
-
-function gradeOrNull(metric: string, raw: string) {
-  if (raw === "N/A" || raw === "∞") return raw === "∞" ? "excellent" : null;
-  return verdict(metric, Number(raw));
-}
-
 function summarize(inputs: DealInputs) {
   const d = analyzeDeal(inputs);
   return {
@@ -119,13 +99,13 @@ function summarize(inputs: DealInputs) {
     },
     indicators: {
       grossYieldPercent: Number(d.grossYield),
-      netYieldPercent: { value: Number(d.netYield), rating: gradeOrNull("netYield", d.netYield) },
-      cashOnCashPercent: { value: d.cashOnCash, rating: gradeOrNull("cashOnCash", d.cashOnCash) },
-      dscr: { value: d.dscr, rating: gradeOrNull("dscr", d.dscr) },
-      capRatePercent: { value: Number(d.capRate), rating: gradeOrNull("capRate", d.capRate) },
-      grm: { value: Number(d.grm), rating: gradeOrNull("grm", d.grm) },
-      onePercentRulePercent: { value: Number(d.onePercentRule), rating: gradeOrNull("onePercentRule", d.onePercentRule) },
-      oerPercent: { value: Number(d.oer), rating: gradeOrNull("oer", d.oer) },
+      netYieldPercent: { value: Number(d.netYield), rating: rateIndicator("netYield", d.netYield) },
+      cashOnCashPercent: { value: d.cashOnCash, rating: rateIndicator("cashOnCash", d.cashOnCash) },
+      dscr: { value: d.dscr, rating: rateIndicator("dscr", d.dscr) },
+      capRatePercent: { value: Number(d.capRate), rating: rateIndicator("capRate", d.capRate) },
+      grm: { value: Number(d.grm), rating: rateIndicator("grm", d.grm) },
+      onePercentRulePercent: { value: Number(d.onePercentRule), rating: rateIndicator("onePercentRule", d.onePercentRule) },
+      oerPercent: { value: Number(d.oer), rating: rateIndicator("oer", d.oer) },
       noiAnnual: Math.round(Number(d.noi)),
     },
     dealProfileScores: d.dealScores,

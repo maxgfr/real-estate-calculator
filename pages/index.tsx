@@ -46,6 +46,11 @@ import {
   getEffectiveManagementRatePercent,
   type ManagementRateUnit,
 } from "../utils";
+import {
+  DSCR_COVERS_DEBT,
+  rateIndicator,
+  type RatedMetric,
+} from "../utils/benchmarks";
 import { analyzeDeal } from "../utils/deal";
 
 type Key =
@@ -206,6 +211,17 @@ const Home: NextPage = () => {
   const inputPlaceholder = useColorModeValue("gray.500", "gray.400");
   const textRevenu = useColorModeValue("green.700", "green.400");
   const textInterest = useColorModeValue("red.600", "red.400");
+
+  // Excellent reads green, good reads muted, weak reads red. Metrics with no
+  // rating (cash-on-cash when no equity is at risk) keep the default colour.
+  const ratingColor = (metric: RatedMetric, raw: string): string | undefined => {
+    switch (rateIndicator(metric, raw)) {
+      case "excellent": return textRendementBon;
+      case "good": return textRendementFaible;
+      case "weak": return textCashflowNegative;
+      default: return undefined;
+    }
+  };
 
   // Sync state from URL when query params are present
   useEffect(() => {
@@ -640,17 +656,21 @@ const Home: NextPage = () => {
                 </StatLabel>
                 <StatNumber
                   fontSize="2xl"
-                  color={Number(netYield) >= 3 ? textRendementBon : textRendementFaible}
+                  color={
+                    rateIndicator("netYield", netYield) === "weak"
+                      ? textRendementFaible
+                      : textRendementBon
+                  }
                   fontWeight="bold"
                 >
                   {formatPercent(netYield)}
                 </StatNumber>
                 <StatHelpText>
-                  {Number(netYield) >= 5
-                    ? "🎯 Excellent"
-                    : Number(netYield) >= 3
-                      ? "👍 Good"
-                      : "⚠️ Low"}
+                  {{
+                    excellent: "🎯 Excellent",
+                    good: "👍 Good",
+                    weak: "⚠️ Low",
+                  }[rateIndicator("netYield", netYield) ?? "weak"]}
                 </StatHelpText>
               </Stat>
             </Box>
@@ -700,31 +720,40 @@ const Home: NextPage = () => {
                 <FlexRow
                   label="DSCR"
                   value={dscr}
-                  color={dscr === '∞' ? textRendementBon : Number(dscr) >= 1.25 ? textRendementBon : Number(dscr) >= 1 ? undefined : textCashflowNegative}
+                  // Not ratingColor: DSCR has a fourth band. Between 1.0 and the
+                  // 1.25 lender minimum the debt is covered, so it reads neutral
+                  // rather than red even though the rating is weak.
+                  color={
+                    rateIndicator("dscr", dscr) !== "weak"
+                      ? textRendementBon
+                      : Number(dscr) >= DSCR_COVERS_DEBT
+                        ? undefined
+                        : textCashflowNegative
+                  }
                   tooltip="Debt Service Coverage Ratio = NOI / Mortgage payment. Measured on NOI, the way a lender does: the CapEx reserve is capital, not an operating expense. ≥ 1.5 excellent, ≥ 1.25 good (standard lender minimum), ≥ 1.0 covers debt (tight), < 1.0 deficit. ∞ if no mortgage (cash purchase)."
                 />
                 <FlexRow
                   label="GRM"
                   value={grm}
-                  color={Number(grm) <= 15 ? textRendementBon : Number(grm) <= 20 ? textRendementFaible : textCashflowNegative}
+                  color={ratingColor("grm", grm)}
                   tooltip="Gross Rent Multiplier = Purchase price / Annual gross rent. Lower is better. < 15 = good deal, 15-20 = average, > 20 = expensive. Only meaningful for comparing properties within the same market."
                 />
                 <FlexRow
                   label="Cap Rate"
                   value={formatPercent(capRate)}
-                  color={Number(capRate) >= 6 ? textRendementBon : Number(capRate) >= 4 ? textRendementFaible : textCashflowNegative}
+                  color={ratingColor("capRate", capRate)}
                   tooltip="Capitalization Rate = NOI / Property Value × 100. NOI = effective rent − management fees − fixed costs − property tax (before debt service and CapEx). Industry standard for comparing properties regardless of financing. ≥ 6% good, 4-6% average, < 4% low."
                 />
                 <FlexRow
                   label="1% Rule"
                   value={`${onePercentRule} %`}
-                  color={Number(onePercentRule) >= 1 ? textRendementBon : Number(onePercentRule) >= 0.7 ? textRendementFaible : textCashflowNegative}
+                  color={ratingColor("onePercentRule", onePercentRule)}
                   tooltip="Monthly rent / Purchase price × 100. Quick heuristic: ≥ 1% generally indicates a good cash-flowing deal. ≥ 0.7% acceptable in appreciating markets."
                 />
                 <FlexRow
                   label="OER"
                   value={`${oer} %`}
-                  color={Number(oer) <= 40 ? textRendementBon : Number(oer) <= 60 ? textRendementFaible : textCashflowNegative}
+                  color={ratingColor("oer", oer)}
                   tooltip="Operating Expense Ratio = Total operating expenses / Gross effective income × 100. Lower is better. ≤ 40% excellent, 40-60% normal, > 60% high expense burden."
                 />
 

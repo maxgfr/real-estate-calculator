@@ -41,6 +41,10 @@ export and the MCP server read the same numbers by construction:
 - **`utils/projections.ts`** — the year-by-year series behind the 18 charts.
 - **`utils/deal.ts`** — `analyzeDeal()`: 16 inputs in, every indicator out. Used by the page
   and by the MCP server. `MODEL_CAVEATS` lists what the model omits.
+- **`utils/benchmarks.ts`** — the excellent/good/weak thresholds. `rateIndicator()` reads the
+  formatted strings `analyzeDeal` returns, sentinels included. The page and the MCP server
+  both call it; do not re-inline a threshold. The README's Benchmarks table is generated from
+  the same constants and `__tests__/readme.test.ts` fails if the two disagree.
 - **`pages/index.tsx`** — main (and only) page. Owns state and URL sync, calls `analyzeDeal`
   once, renders inputs/results, dynamically imports Charts (no SSR).
 - **`components/Charts.tsx`** — rendering only. 18 Recharts visualizations reading from
