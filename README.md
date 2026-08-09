@@ -9,7 +9,7 @@
 - **20+ financial metrics** — cashflow, yields, cash-on-cash, DSCR, GRM, Cap Rate, 1% Rule, OER, break-even rent, breakeven year, exit scenario ROI, and more
 - **18 interactive charts** — ROI, amortization, equity build-up, rent/rate sensitivity, cashflow waterfall, deal profile radar, stress test scenarios, exit ROI, expense decomposition, and more
 - **Mortgage simulator** — accurate monthly payments with full interest breakdown
-- **Complete cost model** — vacancy, management fees (% of rent), CapEx reserve (% of rent), fixed costs, property tax, expense inflation — all factored in with realistic yearly projections
+- **Detailed cost model** — vacancy, management fees (% of effective rent), CapEx reserve (% of gross rent), fixed costs, property tax, expense inflation — all factored in with realistic yearly projections
 - **Exit scenario** — simulate selling at any year with sale price, capital gain, total profit, ROI, and annualized ROI
 - **Stress test** — automatic optimistic/base/pessimistic scenarios with comparison table and 3-curve chart
 - **Deal scoring** — radar chart profiling deal quality across 4 axes (DSCR, CoC, Net Yield, GRM)
@@ -19,6 +19,13 @@
 - **Dark/Light theme** — system-aware, mobile responsive
 - **Real-time updates** — results update instantly as you type
 - **Docker ready** — Dockerfile + docker-compose for easy deployment
+- **MCP server** — the same engine exposed as local tools, so an AI assistant can analyse a property using the real formulas (`pnpm mcp`)
+
+> **The model is pre-tax.** It does not account for rental income tax or any regime
+> (micro-foncier, réel, LMNP), capital gains tax on the sale, mortgage insurance,
+> arrangement or guarantee fees, or selling costs such as agency commission. Cumulative
+> figures sum nominal amounts without discounting, so the annualized exit ROI is a compound
+> growth rate on the down payment, not an IRR — it is insensitive to when the cash arrives.
 
 ## Getting Started
 
@@ -26,7 +33,8 @@
 pnpm install   # Install dependencies
 pnpm dev       # Start dev server (http://localhost:3000)
 pnpm build     # Production build
-pnpm test      # Run tests
+pnpm test      # Run tests (235)
+pnpm mcp       # Run the MCP server on stdio
 ```
 
 ### Docker
@@ -126,6 +134,28 @@ Organized in five sections: **Overview**, **Mortgage**, **Investment**, **Exit &
 | 1% Rule | >= 1% | >= 0.7% | < 0.7% |
 | OER | <= 40% | 40-60% | > 60% |
 
+These are general market thresholds; what counts as a good yield varies enormously by location.
+
+## MCP server
+
+The calculation engine is also available as a local MCP server, so an AI assistant can analyse
+a property with the real formulas instead of doing arithmetic in its head. `.mcp.json`
+registers it for the project; it runs under Node's native TypeScript support, so there is no
+build step.
+
+| Tool | Returns |
+|------|---------|
+| `compute_metrics` | Every indicator, rated against the benchmarks above |
+| `compute_projections` | Cumulative cashflow, equity, total return, payback year |
+| `compute_exit_scenario` | Sale value and ROI for the exit year, plus ROI by exit year |
+| `compute_stress_test` | Optimistic/base/pessimistic, plus rent and rate sensitivity |
+| `compare_deals` | Several properties side by side, ranked |
+| `build_share_url` | A link that opens the app pre-filled |
+
+Every response carries the model's caveats. `.claude/skills/real-estate-deal-analysis/` holds
+the accompanying skill: when to call which tool, how to read the output, and the exact formula
+behind each indicator.
+
 ## Shareable URLs
 
 Every field is stored in the URL. Share or bookmark any scenario:
@@ -142,10 +172,17 @@ real-estate-calculator/
 │   ├── index.tsx          # Main calculator (inputs + results)
 │   └── _app.tsx           # Chakra UI theme provider
 ├── components/
-│   └── Charts.tsx         # 18 interactive charts (recharts)
-├── utils/
-│   ├── index.ts           # All calculation functions (pure, typed)
-│   └── index.test.ts      # Unit tests (110 tests)
+│   └── Charts.tsx         # 18 interactive charts (recharts, rendering only)
+├── utils/                 # The whole engine — pure, typed, UI-free
+│   ├── model.ts           # Shared kernel: income breakdown, amortization, horizons
+│   ├── index.ts           # Indicator functions + exit scenario + stress test
+│   ├── projections.ts     # Year-by-year series behind the charts
+│   ├── deal.ts            # analyzeDeal(): 16 inputs -> every indicator
+│   ├── export.ts          # Excel sheet builder
+│   └── state.ts           # URL <-> state round-trip
+├── mcp/
+│   └── server.ts          # MCP server exposing the engine as tools
+├── .claude/skills/        # Skill for analysing a property in conversation
 ├── .github/workflows/
 │   ├── build.yml          # Build check
 │   ├── ci.yml             # Lint + test + build + Docker
@@ -155,6 +192,9 @@ real-estate-calculator/
 ├── nginx.conf             # Static file serving config
 └── public/                # Favicon, icon, manifest
 ```
+
+Every calculation lives in `utils/` and nothing there imports React, so the browser, the
+Excel export and the MCP server all read the same numbers by construction.
 
 ## Tech Stack
 
@@ -166,6 +206,7 @@ real-estate-calculator/
 | Language | TypeScript | 5 |
 | Testing | Jest | 30 |
 | Export | SheetJS (xlsx) | 0.18 |
+| MCP | @modelcontextprotocol/sdk | 1 |
 | Container | Docker + nginx | - |
 | Package manager | pnpm | >=10 |
 
