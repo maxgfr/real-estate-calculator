@@ -63,6 +63,14 @@ import {
   getEffectiveManagementRatePercent,
   type ManagementRateUnit,
 } from "../utils";
+import {
+  firstBreakevenYear,
+  monthlyIncomeBreakdown,
+  projectionHorizon,
+  yearCashflow,
+  type EscalationRates,
+  type OperatingInputs,
+} from "../utils/model";
 
 type Key =
   | "housingPrice"
@@ -332,14 +340,25 @@ const Home: NextPage = () => {
     [state.bankLoan, totalMortgageInterest]
   );
 
-  // Full-precision net monthly income for all calculations
-  const netMonthlyIncomeExact = useMemo(() => {
-    const effectiveRent = Number(state.rent) * (1 - Number(state.vacancyRate) / 100);
-    const managementFees = effectiveRent * (effectiveMgmtRatePercent / 100);
-    const capex = Number(state.rent) * Number(state.capexRate) / 100;
-    const net = effectiveRent - Number(state.monthlyCosts) - Number(state.propertyTax) / 12 - managementFees - capex;
-    return isNaN(net) ? 0 : net;
-  }, [state.rent, state.monthlyCosts, state.propertyTax, effectiveMgmtRatePercent, state.vacancyRate, state.capexRate]);
+  // Full-precision monthly income breakdown — the single source for every
+  // income-derived metric below (net income, NOI, cashflow, yields, DSCR, OER).
+  const income = useMemo(
+    () =>
+      monthlyIncomeBreakdown({
+        monthlyRent: Number(state.rent),
+        monthlyCosts: Number(state.monthlyCosts),
+        annualPropertyTax: Number(state.propertyTax),
+        vacancyRate: Number(state.vacancyRate),
+        managementRate: effectiveMgmtRatePercent,
+        capexRate: Number(state.capexRate),
+      }),
+    [state.rent, state.monthlyCosts, state.propertyTax, effectiveMgmtRatePercent, state.vacancyRate, state.capexRate]
+  );
+
+  const netMonthlyIncomeExact = useMemo(
+    () => (isNaN(income.netIncome) ? 0 : income.netIncome),
+    [income]
+  );
 
   // Rounded string for display only
   const netMonthlyIncome = useMemo(
@@ -389,9 +408,12 @@ const Home: NextPage = () => {
     [state.bankLoan, state.housingPrice]
   );
 
+  // DSCR is a lender's ratio, computed on NOI. CapEx is a capital reserve, not
+  // an operating expense, so it is excluded here exactly as it is from the cap
+  // rate below — the two used to disagree on what "income" meant.
   const dscr = useMemo(
-    () => getDSCR(netMonthlyIncomeExact, monthlyMortgageExact),
-    [netMonthlyIncomeExact, monthlyMortgageExact]
+    () => getDSCR(income.noi, monthlyMortgageExact),
+    [income, monthlyMortgageExact]
   );
 
   const grm = useMemo(
@@ -401,12 +423,7 @@ const Home: NextPage = () => {
 
   // NOI = Effective rent - operating expenses (before debt service and CapEx reserve)
   // CapEx is a capital reserve, not an operating expense — excluded from NOI per industry standard
-  const noi = useMemo(() => {
-    const effectiveRent = Number(state.rent) * (1 - Number(state.vacancyRate) / 100);
-    const mgmtFees = effectiveRent * (effectiveMgmtRatePercent / 100);
-    const monthlyNOI = effectiveRent - mgmtFees - Number(state.monthlyCosts) - Number(state.propertyTax) / 12;
-    return String(monthlyNOI * 12);
-  }, [state.rent, state.vacancyRate, effectiveMgmtRatePercent, state.monthlyCosts, state.propertyTax]);
+  const noi = useMemo(() => String(income.noi * 12), [income]);
 
   // Cap Rate = NOI / Property Value (purchase + renovation)
   const capRate = useMemo(
@@ -420,14 +437,12 @@ const Home: NextPage = () => {
     [state.rent, state.housingPrice]
   );
 
-  // OER = Monthly operating expenses / Monthly gross effective income (excludes mortgage)
+  // OER = Monthly operating expenses / Monthly gross effective income (excludes
+  // mortgage and, like NOI, the CapEx reserve)
   const oer = useMemo(() => {
-    const effectiveRent = Number(state.rent) * (1 - Number(state.vacancyRate) / 100);
-    // netMonthlyIncome = effectiveRent - mgmt - capex - costs - tax/12 (no mortgage)
-    // Operating expenses = effectiveRent - netMonthlyIncome
-    const operatingExpenses = effectiveRent - netMonthlyIncomeExact;
-    return getOER(String(Math.max(0, operatingExpenses)), String(effectiveRent));
-  }, [state.rent, state.vacancyRate, netMonthlyIncomeExact]);
+    const operatingExpenses = income.effectiveRent - income.noi;
+    return getOER(String(Math.max(0, operatingExpenses)), String(income.effectiveRent));
+  }, [income]);
 
   const projections = useMemo(() => {
     const period = Number(state.bankLoanPeriod);
@@ -452,45 +467,42 @@ const Home: NextPage = () => {
     const rentAtEnd = Math.round(rent * Math.pow(1 + rentRate / 100, period));
 
     // Monthly cashflow AFTER loan (no more mortgage, rent has grown)
-    const effectiveRentAfter = rentAtEnd * (1 - vacancy / 100);
-    const mgmtFees = effectiveRentAfter * (mgmtRate / 100);
-    const capexAfter = rentAtEnd * (capex / 100);
-    const inflatedCosts = costs * Math.pow(1 + inflRate / 100, period);
-    const inflatedTax = tax * Math.pow(1 + inflRate / 100, period);
-    const cashflowAfterLoan = Math.round(effectiveRentAfter - mgmtFees - capexAfter - inflatedCosts - inflatedTax / 12);
+    const cashflowAfterLoan = Math.round(
+      monthlyIncomeBreakdown({
+        monthlyRent: rentAtEnd,
+        monthlyCosts: costs * Math.pow(1 + inflRate / 100, period),
+        annualPropertyTax: tax * Math.pow(1 + inflRate / 100, period),
+        vacancyRate: vacancy,
+        managementRate: mgmtRate,
+        capexRate: capex,
+      }).netIncome
+    );
+
+    const operating: OperatingInputs = {
+      monthlyRent: rent,
+      monthlyCosts: costs,
+      annualPropertyTax: tax,
+      vacancyRate: vacancy,
+      managementRate: mgmtRate,
+      capexRate: capex,
+    };
+    const escalation: EscalationRates = {
+      rentIncreaseRate: rentRate,
+      expenseInflationRate: inflRate,
+    };
 
     // Cumulative cashflow over extended horizon (beyond loan to find breakeven)
-    const horizon = Math.min(period + 10, 40);
-    let cumulativeCF = -dp;
-    let breakevenYear: number | null = null;
-
-    for (let y = 1; y <= horizon; y++) {
-      const r = rent * Math.pow(1 + rentRate / 100, y - 1);
-      const eff = r * (1 - vacancy / 100);
-      const mgmt = eff * (mgmtRate / 100);
-      const cx = r * (capex / 100);
-      const ic = costs * Math.pow(1 + inflRate / 100, y - 1);
-      const it = tax * Math.pow(1 + inflRate / 100, y - 1);
-      const net = eff - mgmt - cx - ic - it / 12;
-      const mortgage = y <= period ? monthlyMortgageExact : 0;
-      const prevCF = cumulativeCF;
-      cumulativeCF += (net - mortgage) * 12;
-      if (prevCF < 0 && cumulativeCF >= 0 && breakevenYear === null) {
-        breakevenYear = y;
-      }
+    const cumulative: number[] = [-dp];
+    for (let y = 1; y <= projectionHorizon(period); y++) {
+      const { annualCashflow } = yearCashflow(operating, escalation, y, monthlyMortgageExact, period);
+      cumulative.push(cumulative[cumulative.length - 1] + annualCashflow);
     }
+    const breakevenYear = firstBreakevenYear(cumulative);
 
     // Cumulative cashflow at loan end specifically
     let cumulativeCFAtLoanEnd = -dp;
     for (let y = 1; y <= period; y++) {
-      const r = rent * Math.pow(1 + rentRate / 100, y - 1);
-      const eff = r * (1 - vacancy / 100);
-      const mgmt = eff * (mgmtRate / 100);
-      const cx = r * (capex / 100);
-      const ic = costs * Math.pow(1 + inflRate / 100, y - 1);
-      const it = tax * Math.pow(1 + inflRate / 100, y - 1);
-      const net = eff - mgmt - cx - ic - it / 12;
-      cumulativeCFAtLoanEnd += (net - monthlyMortgageExact) * 12;
+      cumulativeCFAtLoanEnd += yearCashflow(operating, escalation, y, monthlyMortgageExact, period).annualCashflow;
     }
 
     // Total return = equity (property value, loan repaid) + cumulative cashflow at loan end
@@ -896,13 +908,13 @@ const Home: NextPage = () => {
                   label="Cash-on-cash return"
                   value={cashOnCash === 'N/A' ? 'N/A' : formatPercent(cashOnCash)}
                   color={cashOnCash === 'N/A' ? undefined : Number(cashOnCash) >= 0 ? textCashflowPositive : textCashflowNegative}
-                  tooltip="(Annual cashflow / Down payment) × 100. The actual return on the cash you invested. N/A if 100% financed (no down payment). Target: >8% excellent, 4-8% good."
+                  tooltip="(Annual cashflow / Down payment) × 100. The actual return on the cash you invested. N/A when no equity is at risk (100% financed, or a loan larger than the total cost). Target: >8% excellent, 4-8% good."
                 />
                 <FlexRow
                   label="DSCR"
                   value={dscr}
                   color={dscr === '∞' ? textRendementBon : Number(dscr) >= 1.25 ? textRendementBon : Number(dscr) >= 1 ? undefined : textCashflowNegative}
-                  tooltip="Debt Service Coverage Ratio = Net income / Mortgage payment. ≥ 1.5 excellent, ≥ 1.25 good (standard lender minimum), ≥ 1.0 covers debt (tight), < 1.0 deficit. ∞ if no mortgage (cash purchase)."
+                  tooltip="Debt Service Coverage Ratio = NOI / Mortgage payment. Measured on NOI, the way a lender does: the CapEx reserve is capital, not an operating expense. ≥ 1.5 excellent, ≥ 1.25 good (standard lender minimum), ≥ 1.0 covers debt (tight), < 1.0 deficit. ∞ if no mortgage (cash purchase)."
                 />
                 <FlexRow
                   label="GRM"
@@ -1266,12 +1278,12 @@ const formulas = [
   {
     title: "Cash-on-Cash Return",
     formula: "Cash-on-cash = (Monthly cashflow x 12 / Down payment) x 100",
-    note: "Target: > 8% excellent, 4-8% good. N/A if 100% financed (no down payment).",
+    note: "Target: > 8% excellent, 4-8% good. N/A when no equity is at risk (100% financed, or a loan larger than the total cost).",
   },
   {
     title: "DSCR (Debt Service Coverage Ratio)",
-    formula: "DSCR = Net monthly income / Monthly mortgage payment",
-    note: ">= 1.5 = excellent, >= 1.25 = good (standard lender minimum), >= 1.0 = covers debt (tight), < 1.0 = deficit. N/A if no mortgage.",
+    formula: "DSCR = Monthly NOI / Monthly mortgage payment\nMonthly NOI = Effective rent - Management fees - Fixed costs - Property tax / 12",
+    note: "Measured on NOI, like a lender does: the CapEx reserve is a capital provision, not an operating expense, so it is excluded here exactly as it is from the cap rate. >= 1.5 = excellent, >= 1.25 = good (standard lender minimum), >= 1.0 = covers debt (tight), < 1.0 = deficit. N/A if no mortgage.",
   },
   {
     title: "GRM (Gross Rent Multiplier)",
@@ -1280,8 +1292,8 @@ const formulas = [
   },
   {
     title: "Equity Build-Up",
-    formula: "Equity (principal paid) = Property base value - Remaining balance\nEquity (appreciation) = Base value x (1 + Rate)^Y - Base value\nTotal equity = Equity (principal paid) + Equity (appreciation)",
-    note: "Property base value = Purchase price + Renovation budget. Equity (principal paid) includes down payment + cumulative loan repayment. Appreciation applies to property value only, not rent.",
+    formula: "Equity (loan repayment) = Property base value - Remaining balance\nEquity (appreciation) = Base value x (1 + Rate)^Y - Base value\nTotal equity = Equity (loan repayment) + Equity (appreciation)",
+    note: "Property base value = Purchase price + Renovation budget, so closing costs are not counted as equity in the property. Either band can go negative - appreciation when prices fall, loan repayment when the loan exceeds the property value. Appreciation applies to property value only, not rent.",
   },
   {
     title: "Cumulative Cashflow Projection",

@@ -25,6 +25,21 @@ import {
   PolarRadiusAxis,
 } from "recharts";
 import { computeExitScenario, computeStressScenarios, computeDealProfileScores } from "../utils";
+import {
+  computeAmortization,
+  computeAnnualCashflow,
+  computeAnnualPrincipalVsInterest,
+  computeBreakevenYear,
+  computeCumulativeCashflow,
+  computeEquityBuildUp,
+  computeExpenseDecomposition,
+  computeIncomeVsExpenses,
+  computeRateSensitivity,
+  computeRentSensitivity,
+  computeROIByExitYear,
+  computeTotalReturn,
+  computeWaterfallData,
+} from "../utils/projections";
 
 type Currency = "EUR" | "USD" | "GBP" | "CHF" | "CAD";
 
@@ -75,497 +90,15 @@ const CURRENCY_SYMBOL: Record<Currency, string> = {
 const PIE_COLORS = ["#4299E1", "#ED8936", "#48BB78", "#9F7AEA"];
 const EXPENSE_COLORS = ["#E53E3E", "#ED8936", "#9F7AEA", "#38B2AC", "#D69E2E", "#718096"];
 
-// --- Computation helpers ---
-
-export function computeAmortization(
-  loanAmount: number,
-  annualRate: number,
-  years: number,
-  monthlyPayment: number
-) {
-  const data: { year: number; balance: number; interest: number; principal: number }[] = [];
-  if (loanAmount <= 0 || years <= 0 || monthlyPayment <= 0) return data;
-
-  let balance = loanAmount;
-  let cumInterest = 0;
-  let cumPrincipal = 0;
-  const monthlyRate = annualRate / 100 / 12;
-
-  data.push({ year: 0, balance: Math.round(balance), interest: 0, principal: 0 });
-
-  for (let y = 1; y <= years; y++) {
-    for (let m = 0; m < 12; m++) {
-      if (balance <= 0) break;
-      const interest = monthlyRate === 0 ? 0 : balance * monthlyRate;
-      const isLastPayment = y === years && m === 11;
-      const regularPrincipal = Math.min(monthlyPayment - interest, balance);
-      const principal = isLastPayment ? balance : regularPrincipal;
-      balance = Math.max(0, balance - principal);
-      cumInterest += interest;
-      cumPrincipal += principal;
-    }
-    data.push({
-      year: y,
-      balance: Math.round(balance),
-      interest: Math.round(cumInterest),
-      principal: Math.round(cumPrincipal),
-    });
-  }
-  return data;
-}
-
-export function computeAnnualPrincipalVsInterest(
-  loanAmount: number,
-  annualRate: number,
-  years: number,
-  monthlyPayment: number
-) {
-  const data: { year: number; principal: number; interest: number }[] = [];
-  if (loanAmount <= 0 || years <= 0 || monthlyPayment <= 0) return data;
-
-  let balance = loanAmount;
-  const monthlyRate = annualRate / 100 / 12;
-
-  for (let y = 1; y <= years; y++) {
-    let yearPrincipal = 0;
-    let yearInterest = 0;
-    for (let m = 0; m < 12; m++) {
-      if (balance <= 0) break;
-      const interest = monthlyRate === 0 ? 0 : balance * monthlyRate;
-      const isLastPayment = y === years && m === 11;
-      const regularPrincipal = Math.min(monthlyPayment - interest, balance);
-      const principal = isLastPayment ? balance : regularPrincipal;
-      balance = Math.max(0, balance - principal);
-      yearPrincipal += principal;
-      yearInterest += interest;
-    }
-    data.push({
-      year: y,
-      principal: Math.round(yearPrincipal),
-      interest: Math.round(yearInterest),
-    });
-  }
-  return data;
-}
-
-function computeEquityBuildUp(
-  loanAmount: number,
-  annualRate: number,
-  years: number,
-  monthlyPayment: number,
-  propertyBaseValue: number,
-  appreciationRate: number
-) {
-  const data: { year: number; paidEquity: number; appreciation: number }[] = [];
-  if (years <= 0 || propertyBaseValue <= 0) return data;
-
-  let balance = loanAmount;
-  const monthlyRate = annualRate / 100 / 12;
-
-  for (let y = 0; y <= years; y++) {
-    const propertyValue = propertyBaseValue * Math.pow(1 + appreciationRate / 100, y);
-    const paidEquity = propertyBaseValue - balance;
-    const appreciation = propertyValue - propertyBaseValue;
-
-    data.push({
-      year: y,
-      paidEquity: Math.round(Math.max(0, paidEquity)),
-      appreciation: Math.round(Math.max(0, appreciation)),
-    });
-
-    // Process 12 months
-    for (let m = 0; m < 12; m++) {
-      if (balance <= 0) break;
-      const interest = monthlyRate === 0 ? 0 : balance * monthlyRate;
-      const isLastPayment = y === years - 1 && m === 11;
-      const regularPrincipal = Math.min(monthlyPayment - interest, balance);
-      const principal = isLastPayment ? balance : regularPrincipal;
-      balance = Math.max(0, balance - principal);
-    }
-  }
-  return data;
-}
-
-export function computeCumulativeCashflow(
-  downPayment: number,
-  monthlyRent: number,
-  monthlyCosts: number,
-  annualPropertyTax: number,
-  vacancyRate: number,
-  monthlyMortgage: number,
-  rentIncreaseRate: number,
-  loanPeriod: number,
-  expenseInflationRate: number = 0,
-  managementRate: number = 0,
-  capexRate: number = 0
-) {
-  const data: { year: number; cumulative: number }[] = [];
-  if (loanPeriod <= 0) return data;
-
-  // Show 10 years beyond loan end (capped at 40) to reveal the recovery period
-  const horizon = Math.min(loanPeriod + 10, 40);
-  let cumulative = -downPayment;
-  data.push({ year: 0, cumulative: Math.round(cumulative) });
-
-  for (let y = 1; y <= horizon; y++) {
-    const rent = monthlyRent * Math.pow(1 + rentIncreaseRate / 100, y - 1);
-    const effectiveRent = rent * (1 - vacancyRate / 100);
-    const managementFees = effectiveRent * (managementRate / 100);
-    const inflatedCosts = monthlyCosts * Math.pow(1 + expenseInflationRate / 100, y - 1);
-    const inflatedTax = annualPropertyTax * Math.pow(1 + expenseInflationRate / 100, y - 1);
-    const capex = rent * (capexRate / 100);
-    const netIncome = effectiveRent - managementFees - capex - inflatedCosts - inflatedTax / 12;
-    // After the loan is paid off, no more mortgage payments
-    const mortgage = y <= loanPeriod ? monthlyMortgage : 0;
-    const cashflow = netIncome - mortgage;
-    cumulative += cashflow * 12;
-    data.push({ year: y, cumulative: Math.round(cumulative) });
-  }
-  return data;
-}
-
-function computeRentSensitivity(
-  baseRent: number,
-  monthlyCosts: number,
-  annualPropertyTax: number,
-  vacancyRate: number,
-  monthlyMortgage: number,
-  totalPrice: number,
-  managementRate: number = 0,
-  capexRate: number = 0
-) {
-  const data: { label: string; cashflow: number; netYield: number }[] = [];
-  if (baseRent <= 0 || totalPrice <= 0) return data;
-
-  for (let pct = -20; pct <= 20; pct += 5) {
-    const rent = baseRent * (1 + pct / 100);
-    const effectiveRent = rent * (1 - vacancyRate / 100);
-    const managementFees = effectiveRent * (managementRate / 100);
-    const capex = rent * (capexRate / 100);
-    const netIncome = effectiveRent - managementFees - capex - monthlyCosts - annualPropertyTax / 12;
-    const cashflow = netIncome - monthlyMortgage;
-    const netYield = ((netIncome * 12) / totalPrice) * 100;
-
-    data.push({
-      label: pct === 0 ? "0%" : `${pct > 0 ? "+" : ""}${pct}%`,
-      cashflow: Math.round(cashflow),
-      netYield: Number(netYield.toFixed(2)),
-    });
-  }
-  return data;
-}
-
-export function computeAnnualCashflow(
-  monthlyRent: number,
-  monthlyCosts: number,
-  annualPropertyTax: number,
-  vacancyRate: number,
-  monthlyMortgage: number,
-  rentIncreaseRate: number,
-  loanPeriod: number,
-  expenseInflationRate: number = 0,
-  managementRate: number = 0,
-  capexRate: number = 0
-) {
-  const data: { year: number; cashflow: number }[] = [];
-  if (loanPeriod <= 0) return data;
-  const horizon = Math.min(loanPeriod + 10, 40);
-  for (let y = 1; y <= horizon; y++) {
-    const rent = monthlyRent * Math.pow(1 + rentIncreaseRate / 100, y - 1);
-    const effectiveRent = rent * (1 - vacancyRate / 100);
-    const managementFees = effectiveRent * (managementRate / 100);
-    const inflatedCosts = monthlyCosts * Math.pow(1 + expenseInflationRate / 100, y - 1);
-    const inflatedTax = annualPropertyTax * Math.pow(1 + expenseInflationRate / 100, y - 1);
-    const capex = rent * (capexRate / 100);
-    const netIncome = effectiveRent - managementFees - capex - inflatedCosts - inflatedTax / 12;
-    const mortgage = y <= loanPeriod ? monthlyMortgage : 0;
-    const cashflow = (netIncome - mortgage) * 12;
-    data.push({ year: y, cashflow: Math.round(cashflow) });
-  }
-  return data;
-}
-
-function computeIncomeVsExpenses(
-  monthlyRent: number,
-  monthlyCosts: number,
-  annualPropertyTax: number,
-  vacancyRate: number,
-  monthlyMortgage: number,
-  rentIncreaseRate: number,
-  loanPeriod: number,
-  expenseInflationRate: number = 0,
-  managementRate: number = 0,
-  capexRate: number = 0
-) {
-  const data: { year: number; income: number; totalExpenses: number }[] = [];
-  if (loanPeriod <= 0) return data;
-  const horizon = Math.min(loanPeriod + 10, 40);
-  for (let y = 1; y <= horizon; y++) {
-    const rent = monthlyRent * Math.pow(1 + rentIncreaseRate / 100, y - 1);
-    const effectiveRent = rent * (1 - vacancyRate / 100);
-    const income = effectiveRent * 12;
-    const mortgage = y <= loanPeriod ? monthlyMortgage * 12 : 0;
-    const inflatedCosts = monthlyCosts * Math.pow(1 + expenseInflationRate / 100, y - 1);
-    const inflatedTax = annualPropertyTax * Math.pow(1 + expenseInflationRate / 100, y - 1);
-    const managementFees = effectiveRent * (managementRate / 100);
-    const capex = rent * (capexRate / 100);
-    const totalExpenses = mortgage + (inflatedCosts + managementFees + capex) * 12 + inflatedTax;
-    data.push({
-      year: y,
-      income: Math.round(income),
-      totalExpenses: Math.round(totalExpenses),
-    });
-  }
-  return data;
-}
-
-export function computeTotalReturn(
-  downPayment: number,
-  monthlyRent: number,
-  monthlyCosts: number,
-  annualPropertyTax: number,
-  vacancyRate: number,
-  monthlyMortgage: number,
-  rentIncreaseRate: number,
-  loanPeriod: number,
-  loanAmount: number,
-  annualRate: number,
-  propertyBaseValue: number,
-  appreciationRate: number,
-  expenseInflationRate: number = 0,
-  managementRate: number = 0,
-  capexRate: number = 0
-) {
-  const data: { year: number; cumulativeCashflow: number; equity: number; totalReturn: number }[] = [];
-  if (loanPeriod <= 0) return data;
-
-  const horizon = Math.min(loanPeriod + 10, 40);
-  let cumulativeCF = -downPayment;
-  let balance = loanAmount;
-  const monthlyRate = annualRate / 100 / 12;
-
-  for (let y = 0; y <= horizon; y++) {
-    const propertyValue = propertyBaseValue * Math.pow(1 + appreciationRate / 100, y);
-    const equity = propertyValue - balance;
-
-    if (y > 0) {
-      const rent = monthlyRent * Math.pow(1 + rentIncreaseRate / 100, y - 1);
-      const effectiveRent = rent * (1 - vacancyRate / 100);
-      const managementFees = effectiveRent * (managementRate / 100);
-      const inflatedCosts = monthlyCosts * Math.pow(1 + expenseInflationRate / 100, y - 1);
-      const inflatedTax = annualPropertyTax * Math.pow(1 + expenseInflationRate / 100, y - 1);
-      const capex = rent * (capexRate / 100);
-      const netIncome = effectiveRent - managementFees - capex - inflatedCosts - inflatedTax / 12;
-      const mortgage = y <= loanPeriod ? monthlyMortgage : 0;
-      cumulativeCF += (netIncome - mortgage) * 12;
-    }
-
-    data.push({
-      year: y,
-      cumulativeCashflow: Math.round(cumulativeCF),
-      equity: Math.round(Math.max(0, equity)),
-      totalReturn: Math.round(cumulativeCF + Math.max(0, equity)),
-    });
-
-    // Process 12 months of loan payments
-    for (let m = 0; m < 12; m++) {
-      if (balance <= 0) break;
-      const interest = monthlyRate === 0 ? 0 : balance * monthlyRate;
-      const isLastPayment = y === loanPeriod - 1 && m === 11;
-      const regularPrincipal = Math.min(monthlyMortgage - interest, balance);
-      const principal = isLastPayment ? balance : regularPrincipal;
-      balance = Math.max(0, balance - principal);
-    }
-  }
-  return data;
-}
-
-// --- Expense decomposition ---
-
-export function computeExpenseDecomposition(
-  monthlyRent: number,
-  monthlyCosts: number,
-  annualPropertyTax: number,
-  vacancyRate: number,
-  rentIncreaseRate: number,
-  loanPeriod: number,
-  expenseInflationRate: number = 0,
-  managementRate: number = 0,
-  capexRate: number = 0
-) {
-  const data: { year: number; fixedCosts: number; propertyTax: number; managementFees: number; capex: number; income: number }[] = [];
-  if (loanPeriod <= 0) return data;
-  const horizon = Math.min(loanPeriod + 10, 40);
-  for (let y = 1; y <= horizon; y++) {
-    const rent = monthlyRent * Math.pow(1 + rentIncreaseRate / 100, y - 1);
-    const effectiveRent = rent * (1 - vacancyRate / 100);
-    const fixedCosts = monthlyCosts * Math.pow(1 + expenseInflationRate / 100, y - 1) * 12;
-    const propertyTax = annualPropertyTax * Math.pow(1 + expenseInflationRate / 100, y - 1);
-    const managementFees = effectiveRent * (managementRate / 100) * 12;
-    const capex = rent * (capexRate / 100) * 12;
-    const income = effectiveRent * 12;
-    data.push({
-      year: y,
-      fixedCosts: Math.round(fixedCosts),
-      propertyTax: Math.round(propertyTax),
-      managementFees: Math.round(managementFees),
-      capex: Math.round(capex),
-      income: Math.round(income),
-    });
-  }
-  return data;
-}
-
-// --- ROI by exit year ---
-
-export function computeROIByExitYear(
-  housingPrice: number,
-  houseWorks: number,
-  appreciationRate: number,
-  loanAmount: number,
-  bankRate: number,
-  bankLoanPeriod: number,
-  monthlyMortgage: number,
-  downPayment: number,
-  monthlyRent: number,
-  monthlyCosts: number,
-  annualPropertyTax: number,
-  vacancyRate: number,
-  managementRate: number,
-  rentIncreaseRate: number,
-  expenseInflationRate: number,
-  capexRate: number = 0
-) {
-  const data: { year: number; roi: number }[] = [];
-  if (downPayment === 0) return data;
-  const horizon = Math.min(bankLoanPeriod + 10, 40);
-  for (let y = 1; y <= horizon; y++) {
-    const result = computeExitScenario(
-      y, housingPrice, houseWorks, appreciationRate, loanAmount, bankRate, bankLoanPeriod,
-      monthlyMortgage, downPayment, monthlyRent, monthlyCosts, annualPropertyTax,
-      vacancyRate, managementRate, rentIncreaseRate, expenseInflationRate, capexRate
-    );
-    if (result) {
-      data.push({ year: y, roi: Number(result.annualizedRoi === 'N/A' ? '0' : result.annualizedRoi) });
-    }
-  }
-  return data;
-}
-
-// --- Waterfall cashflow ---
-
-function computeWaterfallData(
-  monthlyRent: number,
-  vacancyRate: number,
-  managementRate: number,
-  capexRate: number,
-  monthlyCosts: number,
-  annualPropertyTax: number,
-  monthlyMortgage: number
-) {
-  const grossRent = monthlyRent;
-  const vacancyLoss = grossRent * (vacancyRate / 100);
-  const effectiveRent = grossRent - vacancyLoss;
-  const mgmtFees = effectiveRent * (managementRate / 100);
-  const capex = grossRent * (capexRate / 100);
-  const fixedCosts = monthlyCosts;
-  const tax = annualPropertyTax / 12;
-  const mortgage = monthlyMortgage;
-
-  // Waterfall data: each bar shows cumulative start and end
-  const items: { name: string; start: number; end: number; value: number; isTotal?: boolean }[] = [];
-  let running = grossRent;
-  items.push({ name: "Gross rent", start: 0, end: grossRent, value: grossRent, isTotal: true });
-
-  if (vacancyLoss > 0) {
-    items.push({ name: "Vacancy", start: running - vacancyLoss, end: running, value: -vacancyLoss });
-    running -= vacancyLoss;
-  }
-  if (mgmtFees > 0) {
-    items.push({ name: "Management", start: running - mgmtFees, end: running, value: -mgmtFees });
-    running -= mgmtFees;
-  }
-  if (capex > 0) {
-    items.push({ name: "CapEx", start: running - capex, end: running, value: -capex });
-    running -= capex;
-  }
-  if (fixedCosts > 0) {
-    items.push({ name: "Fixed costs", start: running - fixedCosts, end: running, value: -fixedCosts });
-    running -= fixedCosts;
-  }
-  if (tax > 0) {
-    items.push({ name: "Property tax", start: running - tax, end: running, value: -tax });
-    running -= tax;
-  }
-  items.push({ name: "Net income", start: 0, end: running, value: running, isTotal: true });
-  if (mortgage > 0) {
-    items.push({ name: "Mortgage", start: running - mortgage, end: running, value: -mortgage });
-    running -= mortgage;
-  }
-  items.push({ name: "Cashflow", start: Math.min(0, running), end: Math.max(0, running), value: running, isTotal: true });
-
-  // Convert to stacked bar format: invisible base + visible bar
-  return items.map((item) => ({
-    name: item.name,
-    base: Math.round(Math.min(item.start, item.end)),
-    value: Math.round(Math.abs(item.end - item.start)),
-    rawValue: Math.round(item.value),
-    isPositive: item.value >= 0,
-    isTotal: item.isTotal || false,
-  }));
-}
-
-// --- Interest rate sensitivity ---
-
-function computeRateSensitivity(
-  monthlyRent: number,
-  monthlyCosts: number,
-  annualPropertyTax: number,
-  vacancyRate: number,
-  managementRate: number,
-  capexRate: number,
-  loanAmount: number,
-  bankRate: number,
-  bankLoanPeriod: number
-) {
-  const data: { label: string; cashflow: number; dscr: number }[] = [];
-  if (loanAmount <= 0 || bankLoanPeriod <= 0) return data;
-
-  const variations = [-2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2];
-  for (const delta of variations) {
-    const rate = Math.max(0, bankRate + delta);
-    const monthlyRate = rate / 100 / 12;
-    const months = bankLoanPeriod * 12;
-    let payment: number;
-    if (monthlyRate === 0) {
-      payment = loanAmount / months;
-    } else {
-      payment = (loanAmount * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -months));
-    }
-
-    const effectiveRent = monthlyRent * (1 - vacancyRate / 100);
-    const mgmtFees = effectiveRent * (managementRate / 100);
-    const capex = monthlyRent * (capexRate / 100);
-    const netIncome = effectiveRent - mgmtFees - capex - monthlyCosts - annualPropertyTax / 12;
-    const cashflow = netIncome - payment;
-    const dscr = payment === 0 ? 0 : netIncome / payment;
-
-    data.push({
-      label: `${delta === 0 ? "" : delta > 0 ? "+" : ""}${delta}%`,
-      cashflow: Math.round(cashflow),
-      dscr: Number(dscr.toFixed(2)),
-    });
-  }
-  return data;
-}
-
 // --- Formatting helpers ---
 
 function makeFormatCurrencyShort(sym: string) {
   return (value: number): string => {
     const sign = value < 0 ? "-" : "";
     const abs = Math.abs(value);
-    if (abs >= 1_000_000) return `${sign}${sym}${(abs / 1_000_000).toFixed(1)}M`;
+    // Test against the rounded thousands, otherwise 999_999 renders as "1000k".
+    if (abs >= 1_000_000 || Math.round(abs / 1_000) >= 1_000)
+      return `${sign}${sym}${(abs / 1_000_000).toFixed(1)}M`;
     if (abs >= 1_000) return `${sign}${sym}${(abs / 1_000).toFixed(0)}k`;
     return `${sign}${sym}${abs.toFixed(0)}`;
   };
@@ -831,15 +364,25 @@ export default function Charts(props: ChartsProps) {
     [monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, rentIncreaseRate, bankLoanPeriod, expenseInflationRate, managementRate, capexRate]
   );
 
-  // Breakeven year from cumulative cashflow
-  const breakevenYear = useMemo(() => {
-    for (let i = 1; i < cumulativeCashflowData.length; i++) {
-      if (cumulativeCashflowData[i - 1].cumulative < 0 && cumulativeCashflowData[i].cumulative >= 0) {
-        return cumulativeCashflowData[i].year;
-      }
-    }
-    return null;
-  }, [cumulativeCashflowData]);
+  // Breakeven year, read from the unrounded series so the marker cannot land a
+  // year before the figure shown in the summary panel.
+  const breakevenYear = useMemo(
+    () =>
+      computeBreakevenYear(
+        downPayment,
+        monthlyRent,
+        monthlyCosts,
+        annualPropertyTax,
+        vacancyRate,
+        monthlyMortgage,
+        rentIncreaseRate,
+        bankLoanPeriod,
+        expenseInflationRate,
+        managementRate,
+        capexRate
+      ),
+    [downPayment, monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage, rentIncreaseRate, bankLoanPeriod, expenseInflationRate, managementRate, capexRate]
+  );
 
   // Exit scenario
   const exitScenarioData = useMemo(
@@ -1192,14 +735,15 @@ export default function Charts(props: ChartsProps) {
         {/* Equity Build-Up */}
         {equityData.length > 0 && (
           <GridItem>
-            <ChartCard title={appreciationRate === 0 ? "Equity Build-Up" : `Equity Build-Up (+${appreciationRate}%/yr)`} info="Total equity = property value minus remaining loan. Blue = equity from principal paid (includes down payment + loan repayment). Green = equity from property appreciation. Appreciation applies to property value only, not rent." {...cardProps}>
+            <ChartCard title={appreciationRate === 0 ? "Equity Build-Up" : `Equity Build-Up (${appreciationRate > 0 ? "+" : ""}${appreciationRate}%/yr)`} info="Total equity = property value minus remaining loan. Blue = equity from loan repayment (property value at purchase minus what you still owe; closing costs are not part of the property's value). Green = equity from appreciation, which goes negative if prices fall. Appreciation applies to property value only, not rent." {...cardProps}>
               <ResponsiveContainer width="100%" height={230}>
                 <AreaChart data={equityData} margin={{ left: 5, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                   <XAxis dataKey="year" tick={{ fill: textColor, fontSize: 12 }} />
                   <YAxis tick={{ fill: textColor, fontSize: 12 }} tickFormatter={(v) => formatCurrencyShort(Number(v))} />
                   <RechartsTooltip formatter={(value) => formatCurrencyFull(Number(value))} contentStyle={tooltipStyle} />
-                  <Area type="monotone" dataKey="paidEquity" name="Equity (principal paid)" stackId="1" stroke="#4299E1" fill="#4299E1" fillOpacity={0.3} strokeWidth={2} />
+                  <ReferenceLine y={0} stroke={textColor} strokeWidth={1} />
+                  <Area type="monotone" dataKey="paidEquity" name="Equity (loan repayment)" stackId="1" stroke="#4299E1" fill="#4299E1" fillOpacity={0.3} strokeWidth={2} />
                   <Area type="monotone" dataKey="appreciation" name="Equity (appreciation)" stackId="1" stroke="#48BB78" fill="#48BB78" fillOpacity={0.3} strokeWidth={2} />
                   <Legend wrapperStyle={{ fontSize: "11px", color: textColor }} />
                 </AreaChart>
@@ -1283,7 +827,7 @@ export default function Charts(props: ChartsProps) {
             {/* ROI by Exit Year */}
             {roiByExitYearData.length > 0 && (
               <GridItem>
-                <ChartCard title="Annualized ROI by Exit Year" info="Annualized return on investment (%) if you sell at each year. Equivalent to the annual compound growth rate of your down payment. Helps compare with other investments and identify the optimal holding period." {...cardProps}>
+                <ChartCard title="Annualized ROI by Exit Year" info="Annualized return on investment (%) if you sell at each year. Equivalent to the annual compound growth rate of your down payment — not an IRR, so it ignores when the cash arrives. A gap in the line means the loss would exceed the whole down payment, leaving no annualized rate to plot. Before tax and selling costs." {...cardProps}>
                   <ResponsiveContainer width="100%" height={230}>
                     <LineChart data={roiByExitYearData} margin={{ left: 5, right: 10 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />

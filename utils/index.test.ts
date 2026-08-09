@@ -3,8 +3,6 @@ import {
   getTotalMortgageInterest,
   getMonthlyMortgagePayment,
   getTotalMortgageCost,
-  getNetMonthlyIncome,
-  getNetMonthlyIncomeDetailed,
   getTotalPurchasePrice,
   getYield,
   getDownPayment,
@@ -79,26 +77,6 @@ describe('getTotalMortgageCost', () => {
   });
 });
 
-describe('getNetMonthlyIncome', () => {
-  it('should calculate net monthly income correctly', () => {
-    // Annual rent: $9600, Annual charges: $600, Annual tax: $800
-    const result = getNetMonthlyIncome('9600', '600', '800');
-    // (9600 - 600 - 800) / 12 = 8200 / 12 = 683.33
-    expect(result).toBe('683');
-  });
-
-  it('should handle zero rent', () => {
-    const result = getNetMonthlyIncome('0', '600', '800');
-    expect(result).toBe('-117');
-  });
-
-  it('should handle negative income correctly', () => {
-    const result = getNetMonthlyIncome('5000', '600', '800');
-    // (5000 - 600 - 800) / 12 = 3600 / 12 = 300
-    expect(result).toBe('300');
-  });
-});
-
 describe('getTotalPurchasePrice', () => {
   it('should calculate total purchase price correctly', () => {
     const result = getTotalPurchasePrice('150000', '13000', '5000');
@@ -162,48 +140,6 @@ describe('getDownPayment', () => {
     const result = getDownPayment('200000', '168000');
     // 168000 - 200000 = -32000
     expect(result).toBe('-32000');
-  });
-});
-
-describe('getNetMonthlyIncomeDetailed', () => {
-  it('should match getNetMonthlyIncomeMixed when extra expenses are zero', () => {
-    // rent=1000, charges=100, propertyTax=1200 (100/mo), vacancy=0%, mgmt=0%, insurance=0, maintenance=0
-    const result = getNetMonthlyIncomeDetailed('1000', '100', '1200', '0', '0', '0', '0');
-    // 1000 - 100 - 100 = 800
-    expect(result).toBe('800');
-  });
-
-  it('should apply vacancy rate correctly', () => {
-    // rent=1000, vacancy=5% → effective rent = 950, no other expenses
-    const result = getNetMonthlyIncomeDetailed('1000', '0', '0', '0', '0', '0', '5');
-    expect(result).toBe('950');
-  });
-
-  it('should apply management fees as % of effective rent', () => {
-    // rent=1000, vacancy=0%, mgmt=8% → fees = 80
-    const result = getNetMonthlyIncomeDetailed('1000', '0', '0', '0', '8', '0', '0');
-    // 1000 - 80 = 920
-    expect(result).toBe('920');
-  });
-
-  it('should deduct all expenses correctly', () => {
-    // rent=1000, charges=80, tax=1200/yr(100/mo), insurance=30, mgmt=7%, maintenance=50, vacancy=5%
-    // effectiveRent = 1000 * 0.95 = 950
-    // mgmtFees = 950 * 0.07 = 66.5
-    // net = 950 - 80 - 100 - 30 - 66.5 - 50 = 623.5 → 624 (rounded)
-    const result = getNetMonthlyIncomeDetailed('1000', '80', '1200', '30', '7', '50', '5');
-    expect(Number(result)).toBeCloseTo(624, 0);
-  });
-
-  it('should handle zero rent', () => {
-    const result = getNetMonthlyIncomeDetailed('0', '80', '1200', '30', '7', '50', '5');
-    // effectiveRent = 0, net = 0 - 80 - 100 - 30 - 0 - 50 = -260
-    expect(result).toBe('-260');
-  });
-
-  it('should handle NaN inputs gracefully', () => {
-    const result = getNetMonthlyIncomeDetailed('invalid', '80', '1200', '30', '7', '50', '5');
-    expect(result).toBe('0');
   });
 });
 
@@ -485,6 +421,42 @@ describe('computeDealProfileScores', () => {
     const dscrScore = result.find(r => r.metric === 'DSCR');
     expect(dscrScore?.score).toBe(100);
   });
+
+  // Regression: an undefined DSCR used to satisfy `!isFinite(dscr)` and score a
+  // perfect 100 alongside the genuine no-mortgage case.
+  it('should not award a perfect DSCR score to an undefined DSCR', () => {
+    const result = computeDealProfileScores(NaN, 8, 5, 14);
+    expect(result.find(r => r.metric === 'DSCR')?.score).toBe(10);
+  });
+
+  // Regression: the descending branch reversed its thresholds a second time, so
+  // every GRM at or below 25 scored 100 and everything above scored 10 — the
+  // whole interpolation was unreachable and a mediocre 24 tied an excellent 8.
+  it('should grade GRM continuously rather than as a step', () => {
+    const grmScore = (grm: number) =>
+      computeDealProfileScores(1.3, 8, 5, grm).find(r => r.metric === 'GRM')!.score;
+
+    expect(grmScore(8)).toBe(100);
+    expect(grmScore(30)).toBe(10);
+    expect(grmScore(14)).toBeLessThan(grmScore(11));
+    expect(grmScore(18)).toBeLessThan(grmScore(14));
+    expect(grmScore(22)).toBeLessThan(grmScore(18));
+    expect(grmScore(24)).toBeLessThan(grmScore(8));
+  });
+
+  it('should grade the ascending metrics continuously too', () => {
+    const cocScore = (coc: number) =>
+      computeDealProfileScores(1.3, coc, 5, 14).find(r => r.metric === 'Cash-on-Cash')!.score;
+
+    expect(cocScore(2)).toBeLessThan(cocScore(6));
+    expect(cocScore(6)).toBeLessThan(cocScore(10));
+    expect(cocScore(10)).toBeLessThan(cocScore(12));
+  });
+
+  it('should floor a metric that is off the scale entirely', () => {
+    const result = computeDealProfileScores(-1, -20, -3, 60);
+    result.forEach(r => expect(r.score).toBe(10));
+  });
 });
 
 describe('getCapRate', () => {
@@ -569,3 +541,32 @@ describe('getEffectiveManagementRatePercent', () => {
   });
 });
 
+
+// --- Non-positive equity guards ---
+//
+// A loan larger than the total cost yields a negative down payment. Every
+// return on equity then divides by a negative number and silently flips sign:
+// a loss-making deal used to display a healthy positive return.
+
+describe('returns with no equity at risk', () => {
+  it('reports cash-on-cash as N/A for a negative down payment', () => {
+    expect(getCashOnCash(-6000, -14000)).toBe('N/A');
+  });
+
+  it('reports cash-on-cash as N/A for a zero down payment', () => {
+    expect(getCashOnCash(6000, 0)).toBe('N/A');
+  });
+
+  it('still reports cash-on-cash normally when equity is at risk', () => {
+    expect(getCashOnCash(2400, 30000)).toBe('8.0');
+  });
+
+  it('reports exit ROI as N/A for a negative down payment', () => {
+    const result = computeExitScenario(
+      12, 200000, 20000, -1, 250000, 4.2, 20, 1543, -14000,
+      1400, 200, 1800, 8, 8, 1, 3, 6
+    );
+    expect(result?.roi).toBe('N/A');
+    expect(result?.annualizedRoi).toBe('N/A');
+  });
+});

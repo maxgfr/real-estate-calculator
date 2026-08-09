@@ -1,3 +1,13 @@
+import {
+  firstBreakevenYear,
+  projectionHorizon,
+  remainingBalanceAfter,
+  yearCashflow,
+  yearIncome,
+  type EscalationRates,
+  type OperatingInputs,
+} from "./model.ts";
+
 export const getTotalMortgageInterest = (
   loanAmount: string | number,
   loanDurationYears: string | number,
@@ -45,65 +55,6 @@ export const getTotalMortgageCost = (
 ): string => {
   const total = Number(loanAmount) + Number(totalInterest);
   return isNaN(total) ? "0" : total.toFixed(decimal);
-};
-
-export const getNetMonthlyIncome = (
-  annualRent: string | number,
-  annualCharges: string | number,
-  annualPropertyTax: string | number,
-  decimal = 0
-): string => {
-  const monthly =
-    Number(annualRent) / 12 -
-    Number(annualCharges) / 12 -
-    Number(annualPropertyTax) / 12;
-  return Number.isNaN(monthly) ? "0" : monthly.toFixed(decimal);
-};
-
-export const getNetMonthlyIncomeMixed = (
-  monthlyRent: string | number,
-  monthlyCharges: string | number,
-  annualPropertyTax: string | number,
-  decimal = 0
-): string => {
-  const monthly =
-    Number(monthlyRent) -
-    Number(monthlyCharges) -
-    Number(annualPropertyTax) / 12;
-  return Number.isNaN(monthly) ? "0" : monthly.toFixed(decimal);
-};
-
-/**
- * Complete net monthly income calculation including:
- * - Vacancy rate (reduces effective rent)
- * - Non-recoverable charges (building fees)
- * - Annual property tax (prorated monthly)
- * - Monthly insurance
- * - Property management fees (% of effective rent)
- * - Monthly maintenance budget
- */
-export const getNetMonthlyIncomeDetailed = (
-  monthlyRent: string | number,
-  monthlyCharges: string | number,
-  annualPropertyTax: string | number,
-  monthlyInsurance: string | number,
-  managementRatePercent: string | number,
-  monthlyMaintenance: string | number,
-  vacancyRatePercent: string | number,
-  decimal = 0
-): string => {
-  const effectiveRent =
-    Number(monthlyRent) * (1 - Number(vacancyRatePercent) / 100);
-  const managementFees =
-    effectiveRent * (Number(managementRatePercent) / 100);
-  const monthly =
-    effectiveRent -
-    Number(monthlyCharges) -
-    Number(annualPropertyTax) / 12 -
-    Number(monthlyInsurance) -
-    managementFees -
-    Number(monthlyMaintenance);
-  return Number.isNaN(monthly) ? "0" : monthly.toFixed(decimal);
 };
 
 /**
@@ -172,7 +123,9 @@ export const getCashOnCash = (
   decimal = 1
 ): string => {
   const dp = Number(downPayment);
-  if (dp === 0) return 'N/A';
+  // A non-positive down payment means no equity at risk (or a loan exceeding
+  // the total cost). Dividing by it inverts the sign of the return.
+  if (dp <= 0) return 'N/A';
   const pct = (Number(annualCashflow) / dp) * 100;
   return isNaN(pct) || !isFinite(pct) ? '0' : pct.toFixed(decimal);
 };
@@ -301,43 +254,31 @@ export function computeExitScenario(
   const salePrice = Math.round(baseValue * Math.pow(1 + appreciationRate / 100, exitYear));
   const capitalGain = salePrice - baseValue;
 
-  // Simulate amortization to get remaining balance
-  let balance = loanAmount;
-  const monthlyRate = bankRate / 100 / 12;
-  for (let y = 0; y < Math.min(exitYear, bankLoanPeriod); y++) {
-    for (let m = 0; m < 12; m++) {
-      if (balance <= 0) break;
-      const interest = monthlyRate === 0 ? 0 : balance * monthlyRate;
-      const isLastPayment = y === bankLoanPeriod - 1 && m === 11;
-      const regularPrincipal = Math.min(monthlyMortgage - interest, balance);
-      const principal = isLastPayment ? balance : regularPrincipal;
-      balance = Math.max(0, balance - principal);
-    }
-  }
-  const remainingBalance = Math.round(balance);
+  const remainingBalance = Math.round(
+    remainingBalanceAfter(loanAmount, bankRate, bankLoanPeriod, monthlyMortgage, exitYear)
+  );
   const equityPaid = loanAmount - remainingBalance;
 
-  // Cumulative cashflow
+  const base: OperatingInputs = {
+    monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, managementRate, capexRate,
+  };
+  const rates: EscalationRates = { rentIncreaseRate, expenseInflationRate };
+
   let cumulativeCF = -downPayment;
   for (let y = 1; y <= exitYear; y++) {
-    const rent = monthlyRent * Math.pow(1 + rentIncreaseRate / 100, y - 1);
-    const effectiveRent = rent * (1 - vacancyRate / 100);
-    const mgmtFees = effectiveRent * (managementRate / 100);
-    const capex = rent * (capexRate / 100);
-    const inflatedCosts = monthlyCosts * Math.pow(1 + expenseInflationRate / 100, y - 1);
-    const inflatedTax = annualPropertyTax * Math.pow(1 + expenseInflationRate / 100, y - 1);
-    const netIncome = effectiveRent - mgmtFees - capex - inflatedCosts - inflatedTax / 12;
-    const mortgage = y <= bankLoanPeriod ? monthlyMortgage : 0;
-    cumulativeCF += (netIncome - mortgage) * 12;
+    cumulativeCF += yearCashflow(base, rates, y, monthlyMortgage, bankLoanPeriod).annualCashflow;
   }
   const cumulativeCashflow = Math.round(cumulativeCF);
 
   // Total profit = cashflow + sale price - remaining debt
   const totalProfit = cumulativeCashflow + salePrice - remainingBalance;
 
+  // Returns are expressed against the equity actually put in. With a
+  // non-positive down payment (loan >= total cost) there is none, and dividing
+  // by it silently flips the sign of every figure below.
   const dp = downPayment;
-  const roi = dp === 0 ? 'N/A' : ((totalProfit / dp) * 100).toFixed(1);
-  const annualizedRoi = dp === 0 || exitYear === 0
+  const roi = dp <= 0 ? 'N/A' : ((totalProfit / dp) * 100).toFixed(1);
+  const annualizedRoi = dp <= 0 || exitYear === 0
     ? 'N/A'
     : totalProfit / dp <= -1
       ? 'N/A'
@@ -389,50 +330,34 @@ export function computeStressScenarios(
   ];
 
   return scenarios.map((s) => {
-    const horizon = Math.min(loanPeriod + 10, 40);
+    const base: OperatingInputs = {
+      monthlyRent, monthlyCosts, annualPropertyTax,
+      vacancyRate: s.vacancy, managementRate, capexRate,
+    };
+    const rates: EscalationRates = {
+      rentIncreaseRate: s.rentInc,
+      expenseInflationRate: s.expInf,
+    };
+
     const annualData: { year: number; cashflow: number }[] = [];
-    let cumCF = -downPayment;
-    let breakevenYear: number | null = null;
+    const cumulative: number[] = [-downPayment];
 
-    for (let y = 1; y <= horizon; y++) {
-      const rent = monthlyRent * Math.pow(1 + s.rentInc / 100, y - 1);
-      const effectiveRent = rent * (1 - s.vacancy / 100);
-      const mgmtFees = effectiveRent * (managementRate / 100);
-      const capex = rent * (capexRate / 100);
-      const inflatedCosts = monthlyCosts * Math.pow(1 + s.expInf / 100, y - 1);
-      const inflatedTax = annualPropertyTax * Math.pow(1 + s.expInf / 100, y - 1);
-      const netIncome = effectiveRent - mgmtFees - capex - inflatedCosts - inflatedTax / 12;
-      const mortgage = y <= loanPeriod ? monthlyMortgage : 0;
-      const annualCashflow = (netIncome - mortgage) * 12;
+    for (let y = 1; y <= projectionHorizon(loanPeriod); y++) {
+      const { annualCashflow } = yearCashflow(base, rates, y, monthlyMortgage, loanPeriod);
       annualData.push({ year: y, cashflow: Math.round(annualCashflow) });
-
-      const prevCum = cumCF;
-      cumCF += annualCashflow;
-      if (prevCum < 0 && cumCF >= 0 && breakevenYear === null) {
-        breakevenYear = y;
-      }
+      cumulative.push(cumulative[cumulative.length - 1] + annualCashflow);
     }
+    const breakevenYear = firstBreakevenYear(cumulative);
 
-    // DSCR for year 1
-    const rent1 = monthlyRent;
-    const eff1 = rent1 * (1 - s.vacancy / 100);
-    const mgmt1 = eff1 * (managementRate / 100);
-    const capex1 = rent1 * (capexRate / 100);
-    const netIncome1 = eff1 - mgmt1 - capex1 - monthlyCosts - annualPropertyTax / 12;
-    const dscrVal = monthlyMortgage === 0 ? '∞' : (netIncome1 / monthlyMortgage).toFixed(2);
+    // DSCR for year 1, on NOI (CapEx is a reserve, not an operating expense)
+    const noi1 = yearIncome(base, rates, 1).noi;
+    const dscrVal = monthlyMortgage === 0 ? '∞' : (noi1 / monthlyMortgage).toFixed(2);
 
     // Total return at loan end
     const propValue = propertyBaseValue * Math.pow(1 + appreciationRate / 100, loanPeriod);
     let cumAtLoanEnd = -downPayment;
     for (let y = 1; y <= loanPeriod; y++) {
-      const rent = monthlyRent * Math.pow(1 + s.rentInc / 100, y - 1);
-      const effectiveRent = rent * (1 - s.vacancy / 100);
-      const mgmtFees = effectiveRent * (managementRate / 100);
-      const capex = rent * (capexRate / 100);
-      const inflatedCosts = monthlyCosts * Math.pow(1 + s.expInf / 100, y - 1);
-      const inflatedTax = annualPropertyTax * Math.pow(1 + s.expInf / 100, y - 1);
-      const netIncome = effectiveRent - mgmtFees - capex - inflatedCosts - inflatedTax / 12;
-      cumAtLoanEnd += (netIncome - monthlyMortgage) * 12;
+      cumAtLoanEnd += yearCashflow(base, rates, y, monthlyMortgage, loanPeriod).annualCashflow;
     }
     const totalReturn = Math.round(propValue + cumAtLoanEnd);
 
@@ -456,8 +381,12 @@ export function computeDealProfileScores(
   netYield: number,
   grm: number
 ): { metric: string; score: number; fullMark: number }[] {
+  // `thresholds` is always given worst-to-best for ascending metrics and
+  // best-to-worst for descending ones — i.e. always sorted ascending. Do not
+  // reverse it: both branches below already read it in that order.
   function score(value: number, thresholds: [number, number, number, number], ascending = true): number {
-    const [t1, t2, t3, t4] = ascending ? thresholds : [...thresholds].reverse();
+    const [t1, t2, t3, t4] = thresholds;
+    if (!isFinite(value)) return value === Infinity ? (ascending ? 100 : 10) : 10;
     if (ascending) {
       if (value >= t4) return 100;
       if (value >= t3) return 70 + 30 * (value - t3) / (t4 - t3);
@@ -473,7 +402,9 @@ export function computeDealProfileScores(
     return 10;
   }
 
-  const dscrScore = !isFinite(dscr) ? 100 : Math.round(score(dscr, [0.8, 1.0, 1.25, 1.5], true));
+  // An infinite DSCR means no mortgage at all, which is the best possible case.
+  // A NaN one means the income is undefined — that must not read as perfect.
+  const dscrScore = Math.round(score(dscr, [0.8, 1.0, 1.25, 1.5], true));
   const cocScore = Math.round(score(cashOnCash, [0, 4, 8, 12], true));
   const nyScore = Math.round(score(netYield, [1, 3, 5, 7], true));
   const grmScore = Math.round(score(grm, [10, 15, 20, 25], false));

@@ -10,7 +10,7 @@ import {
   type ExportProjections,
 } from './export';
 import type { ExitScenarioResult, StressScenarioResult } from './index';
-import { computeExitScenario, computeStressScenarios } from './index';
+import { computeStressScenarios } from './index';
 
 // --- Realistic test fixtures matching default state ---
 

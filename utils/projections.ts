@@ -9,6 +9,7 @@
  */
 import {
   amortizationSchedule,
+  firstBreakevenYear,
   monthlyIncomeBreakdown,
   projectionHorizon,
   yearCashflow,
@@ -83,16 +84,49 @@ export function computeEquityBuildUp(
     const balance = y === 0 ? loanAmount : schedule[y - 1].closingBalance;
     const propertyValue = propertyBaseValue * Math.pow(1 + appreciationRate / 100, y);
 
+    // The two series stack, so they must sum to the real equity. Clamping each
+    // one separately floors the appreciation band at 0 when prices fall and
+    // makes the stack overstate total equity.
     data.push({
       year: y,
-      paidEquity: Math.round(Math.max(0, propertyBaseValue - balance)),
-      appreciation: Math.round(Math.max(0, propertyValue - propertyBaseValue)),
+      paidEquity: Math.round(propertyBaseValue - balance),
+      appreciation: Math.round(propertyValue - propertyBaseValue),
     });
   }
   return data;
 }
 
 // --- Cashflow ---
+
+/**
+ * Running cash position at full precision, index `i` = end of year `i`.
+ * Break-even must be read from this, not from the rounded chart rows: a true
+ * cumulative of -0.4 rounds to 0 and reports break-even a year early.
+ */
+export function cumulativeCashflowSeries(
+  downPayment: number,
+  monthlyRent: number,
+  monthlyCosts: number,
+  annualPropertyTax: number,
+  vacancyRate: number,
+  monthlyMortgage: number,
+  rentIncreaseRate: number,
+  loanPeriod: number,
+  expenseInflationRate: number = 0,
+  managementRate: number = 0,
+  capexRate: number = 0
+): number[] {
+  if (loanPeriod <= 0) return [];
+
+  const base: OperatingInputs = { monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, managementRate, capexRate };
+  const rates: EscalationRates = { rentIncreaseRate, expenseInflationRate };
+
+  const series = [-downPayment];
+  for (let y = 1; y <= projectionHorizon(loanPeriod); y++) {
+    series.push(series[y - 1] + yearCashflow(base, rates, y, monthlyMortgage, loanPeriod).annualCashflow);
+  }
+  return series;
+}
 
 export function computeCumulativeCashflow(
   downPayment: number,
@@ -107,20 +141,32 @@ export function computeCumulativeCashflow(
   managementRate: number = 0,
   capexRate: number = 0
 ) {
-  const data: { year: number; cumulative: number }[] = [];
-  if (loanPeriod <= 0) return data;
+  return cumulativeCashflowSeries(
+    downPayment, monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage,
+    rentIncreaseRate, loanPeriod, expenseInflationRate, managementRate, capexRate
+  ).map((cumulative, year) => ({ year, cumulative: Math.round(cumulative) }));
+}
 
-  const base: OperatingInputs = { monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, managementRate, capexRate };
-  const rates: EscalationRates = { rentIncreaseRate, expenseInflationRate };
-
-  let cumulative = -downPayment;
-  data.push({ year: 0, cumulative: Math.round(cumulative) });
-
-  for (let y = 1; y <= projectionHorizon(loanPeriod); y++) {
-    cumulative += yearCashflow(base, rates, y, monthlyMortgage, loanPeriod).annualCashflow;
-    data.push({ year: y, cumulative: Math.round(cumulative) });
-  }
-  return data;
+/** Year the cumulative cash position first turns non-negative, or `null`. */
+export function computeBreakevenYear(
+  downPayment: number,
+  monthlyRent: number,
+  monthlyCosts: number,
+  annualPropertyTax: number,
+  vacancyRate: number,
+  monthlyMortgage: number,
+  rentIncreaseRate: number,
+  loanPeriod: number,
+  expenseInflationRate: number = 0,
+  managementRate: number = 0,
+  capexRate: number = 0
+): number | null {
+  return firstBreakevenYear(
+    cumulativeCashflowSeries(
+      downPayment, monthlyRent, monthlyCosts, annualPropertyTax, vacancyRate, monthlyMortgage,
+      rentIncreaseRate, loanPeriod, expenseInflationRate, managementRate, capexRate
+    )
+  );
 }
 
 export function computeAnnualCashflow(
@@ -250,11 +296,14 @@ export function computeTotalReturn(
     const balance = y === 0 ? loanAmount : schedule[y - 1].closingBalance;
     const equity = propertyBaseValue * Math.pow(1 + appreciationRate / 100, y) - balance;
 
+    // Equity may legitimately be negative (property worth less than the
+    // outstanding loan). Clamping it to 0 hid exactly that case and overstated
+    // the total return by the amount the deal was underwater.
     data.push({
       year: y,
       cumulativeCashflow: Math.round(cumulativeCF),
-      equity: Math.round(Math.max(0, equity)),
-      totalReturn: Math.round(cumulativeCF + Math.max(0, equity)),
+      equity: Math.round(equity),
+      totalReturn: Math.round(cumulativeCF + equity),
     });
   }
   return data;
@@ -278,8 +327,9 @@ export function computeROIByExitYear(
   expenseInflationRate: number,
   capexRate: number = 0
 ) {
-  const data: { year: number; roi: number }[] = [];
-  if (downPayment === 0) return data;
+  // ROI on equity is undefined without equity at risk.
+  const data: { year: number; roi: number | null }[] = [];
+  if (downPayment <= 0) return data;
 
   for (let y = 1; y <= projectionHorizon(bankLoanPeriod); y++) {
     const result = computeExitScenario(
@@ -288,7 +338,13 @@ export function computeROIByExitYear(
       vacancyRate, managementRate, rentIncreaseRate, expenseInflationRate, capexRate
     );
     if (result) {
-      data.push({ year: y, roi: Number(result.annualizedRoi === "N/A" ? "0" : result.annualizedRoi) });
+      // 'N/A' means the loss exceeded the whole down payment, so no annualised
+      // rate exists. Plotting it as 0 % put a total wipeout on the break-even
+      // line; null leaves a gap instead.
+      data.push({
+        year: y,
+        roi: result.annualizedRoi === "N/A" ? null : Number(result.annualizedRoi),
+      });
     }
   }
   return data;
@@ -353,7 +409,10 @@ export function computeRateSensitivity(
     data.push({
       label: `${delta === 0 ? "" : delta > 0 ? "+" : ""}${delta}%`,
       cashflow: Math.round(netIncome - payment),
-      dscr: Number((payment === 0 ? 0 : netIncome / payment).toFixed(2)),
+      // No debt service means no coverage constraint. Reporting 0 here made a
+      // cash purchase look catastrophic on this chart while every other
+      // indicator showed the same deal as unconstrained.
+      dscr: payment === 0 ? Infinity : Number((netIncome / payment).toFixed(2)),
     });
   }
   return data;

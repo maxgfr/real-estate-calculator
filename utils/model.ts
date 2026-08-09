@@ -178,7 +178,10 @@ export function amortizationSchedule(
       if (balance <= 0) break;
       const monthInterest = balance * monthlyRate;
       const isFinalScheduledPayment = year === termYears && month === 11;
-      const scheduledPrincipal = Math.min(monthlyPayment - monthInterest, balance);
+      // A payment smaller than the month's interest amortizes nothing. Without
+      // the lower clamp the principal goes negative and the balance *grows*,
+      // which no guard downstream catches.
+      const scheduledPrincipal = Math.max(0, Math.min(monthlyPayment - monthInterest, balance));
       const monthPrincipal = isFinalScheduledPayment ? balance : scheduledPrincipal;
       balance = Math.max(0, balance - monthPrincipal);
       interest += monthInterest;
@@ -212,16 +215,23 @@ export function remainingBalanceAfter(
 // --- Break-even ---
 
 /**
- * First year in which cumulative cash turns non-negative, or `null` if it never
- * does. `cumulative[i]` is the running cash position at end of year `i`
- * (index 0 = year 0, i.e. minus the down payment).
+ * Payback year: the first year from which cumulative cash is non-negative *and
+ * stays* non-negative for the rest of the horizon. `null` if it never does.
+ * `cumulative[i]` is the running cash position at end of year `i` (index 0 =
+ * year 0, i.e. minus the down payment).
+ *
+ * The "and stays" clause is what makes the answer meaningful. A first-crossing
+ * scan reports year 0 for any deal that needs no cash up front, even one whose
+ * cumulative position then sinks and never returns; and it reports nothing at
+ * all for such a deal if it requires a strictly negative starting point.
  *
  * Takes unrounded values on purpose: scanning a rounded series reports
  * break-even a year early whenever the true cumulative is a small negative.
  */
 export function firstBreakevenYear(cumulative: number[]): number | null {
-  for (let i = 1; i < cumulative.length; i++) {
-    if (cumulative[i - 1] < 0 && cumulative[i] >= 0) return i;
-  }
-  return null;
+  if (cumulative.length === 0 || cumulative[cumulative.length - 1] < 0) return null;
+
+  let year = cumulative.length - 1;
+  while (year > 0 && cumulative[year - 1] >= 0) year--;
+  return year;
 }
