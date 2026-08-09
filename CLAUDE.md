@@ -11,8 +11,9 @@ A Next.js static real estate investment calculator. Fully client-side (no API ro
 ```bash
 pnpm dev              # Start dev server
 pnpm build            # Static export (output: 'export' in next.config.js)
-pnpm lint             # ESLint (flat config, TypeScript)
+pnpm lint             # ESLint (flat config, TypeScript + Next core-web-vitals)
 pnpm lint:fix         # Auto-fix lint issues
+pnpm typecheck        # tsc --noEmit; covers mcp/server.ts, which `next build` does not
 pnpm test             # Jest (jsdom environment)
 pnpm test:watch       # Jest in watch mode
 pnpm test:coverage    # Jest with coverage

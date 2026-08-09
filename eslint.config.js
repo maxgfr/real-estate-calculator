@@ -1,5 +1,6 @@
 import globals from 'globals';
 import js from '@eslint/js';
+import next from '@next/eslint-plugin-next';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
@@ -19,6 +20,9 @@ export default [
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  // The Next rules only. `eslint-config-next` would also drag in its own React,
+  // import-resolver and TypeScript setup, which this config already provides.
+  next.configs['core-web-vitals'],
   {
     languageOptions: {
       ecmaVersion: 2024,
