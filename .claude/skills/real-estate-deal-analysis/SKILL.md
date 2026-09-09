@@ -1,6 +1,9 @@
 ---
 name: real-estate-deal-analysis
-description: Use when someone wants a rental property analysed or compared — "analyse ce bien", "est-ce que ce deal est bon ?", "quel rendement pour…", "combien de cashflow", "j'hésite entre ces deux appartements", "analyse this property", "is this a good rental deal", "what yield would I get". Computes every indicator with the real-estate-calculator MCP tools and reads the result against market benchmarks. Not for editing the calculator's source code.
+description: Analyze and compare rental property investments with the real-estate-calculator MCP tools.
+disable-model-invocation: true
+metadata:
+  opencode/autoinvoke: 'false'
 ---
 
 # Analysing a rental property

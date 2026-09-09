@@ -1,9 +1,10 @@
 interface:
-  display_name: "Real Estate Deal Analysis"
-  short_description: "Analyse and compare rental property deals"
-
+  display_name: Real Estate Deal Analysis
+  short_description: Analyse and compare rental property deals
 dependencies:
   tools:
-    - type: "mcp"
-      value: "real-estate-calculator"
-      description: "Local MCP server exposing the calculator's verified deal-analysis engine"
+  - type: mcp
+    value: real-estate-calculator
+    description: Local MCP server exposing the calculator's verified deal-analysis engine
+policy:
+  allow_implicit_invocation: false
