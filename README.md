@@ -161,9 +161,9 @@ build step.
 | `compare_deals` | Several properties side by side, ranked |
 | `build_share_url` | A link that opens the app pre-filled |
 
-Every response carries the model's caveats. `.claude/skills/real-estate-deal-analysis/` holds
+Every response carries the model's caveats. `skills/real-estate-deal-analysis/` holds
 the accompanying skill: when to call which tool, how to read the output, and the exact formula
-behind each indicator.
+behind each indicator. Install it with `npx skills add maxgfr/real-estate-calculator`.
 
 ## Shareable URLs
 
@@ -200,7 +200,7 @@ real-estate-calculator/
 │   └── *.test.ts          # One suite per module
 ├── mcp/
 │   └── server.ts          # MCP server exposing the engine as tools
-├── .claude/skills/        # Skill for analysing a property in conversation
+├── skills/                # Skill for analysing a property in conversation
 ├── .github/workflows/
 │   ├── build.yml          # Build check
 │   ├── ci.yml             # Lint + typecheck + test + build + Docker
