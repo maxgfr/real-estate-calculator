@@ -149,8 +149,9 @@ These are general market thresholds; what counts as a good yield varies enormous
 
 The calculation engine is also available as a local MCP server, so an AI assistant can analyse
 a property with the real formulas instead of doing arithmetic in its head. `.mcp.json`
-registers it for the project; it runs under Node's native TypeScript support, so there is no
-build step.
+registers it for the project with agents that read that file; any other MCP client can launch
+the same stdio command, `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON mcp/server.ts`,
+from the repo root. It runs under Node's native TypeScript support, so there is no build step.
 
 | Tool | Returns |
 |------|---------|
@@ -235,6 +236,6 @@ MIT
 
 ## Manual skill invocation
 
-These skills run when explicitly invoked: `real-estate-deal-analysis`. Use `$name` in Codex or `/name` in Claude Code and OpenCode (with the plugin namespace when installed as a Claude plugin).
+These skills run when explicitly invoked: `real-estate-deal-analysis`. Use `$name` in Codex or `/name` in Claude Code and OpenCode.
 
 The skill bundle disables implicit selection: Claude Code and OpenCode read `disable-model-invocation: true` from `SKILL.md`.
