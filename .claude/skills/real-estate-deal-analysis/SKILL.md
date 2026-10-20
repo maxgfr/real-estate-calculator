@@ -2,8 +2,6 @@
 name: real-estate-deal-analysis
 description: Analyze and compare rental property investments with the real-estate-calculator MCP tools.
 disable-model-invocation: true
-metadata:
-  opencode/autoinvoke: 'false'
 ---
 
 # Analysing a rental property
