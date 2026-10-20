@@ -33,3 +33,8 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# agent skill installs (npx skills add …) — never committed
+.agents/skills/
+.claude/skills/
+skills-lock.json

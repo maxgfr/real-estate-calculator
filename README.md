@@ -163,7 +163,8 @@ build step.
 
 Every response carries the model's caveats. `skills/real-estate-deal-analysis/` holds
 the accompanying skill: when to call which tool, how to read the output, and the exact formula
-behind each indicator. Install it with `npx skills add maxgfr/real-estate-calculator`.
+behind each indicator. Install it with `npx skills add maxgfr/real-estate-calculator`; from a
+clone, install the repo's skills for your agent with `npx skills add .` (`-a <agent>` optional).
 
 ## Shareable URLs
 

@@ -80,3 +80,8 @@ Next.js 16 + React 19 + TypeScript 5 (strict) + Chakra UI 2 + Recharts 3 + XLSX 
 The MCP server runs under Node 24's native type stripping — no build step. That is why
 relative imports inside `utils/` and `mcp/` carry explicit `.ts` extensions
 (`allowImportingTsExtensions` is on); Next and Jest resolve them fine.
+
+## Skills
+- `skills/real-estate-deal-analysis/SKILL.md` — analyze and compare rental property investments with the real-estate-calculator MCP tools (`reference.md` beside it holds the formulas). Use it only when the user asks for it (read the file and follow it).
+
+Install it for your agent with `npx skills add .` (pick the agent, or `-a <agent>`). Users install the published skill with `npx skills add maxgfr/real-estate-calculator`.
